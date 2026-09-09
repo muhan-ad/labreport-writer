@@ -201,15 +201,19 @@ ipcMain.handle('scan-experiments', () => {
     const generatePy = path.join(expPath, 'generate.py');
     if (!fs.existsSync(generatePy)) continue;
     const files = fs.readdirSync(expPath);
-    const xlsx = files.find(f => f.endsWith('.xlsx'));
+    // 方式三：数据真相为 data.json / schema.json（xlsx 为遗留模板，不再参与判定）
+    const hasDataJson = files.includes('data.json');
+    const hasSchemaJson = files.includes('schema.json');
     const docx = files.find(f => f.endsWith('.docx'));
     results.push({
       id: d.name,
       name: d.name,
       path: expPath,
-      hasData: !!xlsx,
+      hasData: hasDataJson || hasSchemaJson,
       hasReport: !!docx,
-      dataFile: xlsx ? path.join(expPath, xlsx) : null,
+      dataFile: hasDataJson
+        ? path.join(expPath, 'data.json')
+        : (hasSchemaJson ? path.join(expPath, 'schema.json') : null),
       reportFile: docx ? path.join(expPath, docx) : null,
     });
   }
@@ -268,6 +272,108 @@ ipcMain.handle('read-sections', (_, expPath) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+// ── IPC: AI 润色技能文件管理（userData/skills，导入外部开源 Skill 文件）──
+function getSkillsDir() {
+  const dir = path.join(app.getPath('userData'), 'skills');
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* 忽略 */ }
+  return dir;
+}
+
+// 解析 SKILL.md frontmatter（--- name/description ---）；无 frontmatter 时用文件名兜底
+function parseSkillMeta(text, fallbackName) {
+  let name = fallbackName, description = '', body = text;
+  const m = String(text).match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (m) {
+    body = text.slice(m[0].length);
+    for (const line of m[1].split(/\r?\n/)) {
+      const kv = String(line).match(/^([A-Za-z_-]+)\s*:\s*(.*)$/);
+      if (!kv) continue;
+      const k = kv[1].toLowerCase();
+      const v = kv[2].trim().replace(/^["']|["']$/g, '');
+      if (k === 'name' && v) name = v;
+      else if (k === 'description' && v) description = v;
+    }
+  }
+  return { name, description, body: body.trim() };
+}
+
+ipcMain.handle('list-skills', () => {
+  try {
+    const dir = getSkillsDir();
+    const out = [];
+    for (const f of fs.readdirSync(dir)) {
+      if (!/\.(md|markdown|txt)$/i.test(f)) continue;
+      try {
+        const meta = parseSkillMeta(fs.readFileSync(path.join(dir, f), 'utf-8'), path.basename(f, path.extname(f)));
+        out.push({ id: f, name: meta.name, description: meta.description, content: meta.body });
+      } catch (e) { /* 跳过损坏文件 */ }
+    }
+    out.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
+    return { ok: true, skills: out, dir };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('import-skill', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: '导入 Skill 文件',
+      filters: [{ name: 'Skill 文件', extensions: ['md', 'markdown', 'txt'] }],
+      properties: ['openFile', 'multiSelection'],
+    });
+    if (canceled || !filePaths || !filePaths.length) return { ok: true, imported: [], errors: [] };
+    const dir = getSkillsDir();
+    const imported = [];
+    const errors = [];
+    for (const src of filePaths) {
+      try {
+        const text = fs.readFileSync(src, 'utf-8');
+        const meta = parseSkillMeta(text, path.basename(src, path.extname(src)));
+        // 目标文件名：用技能名净化生成，重名自动加序号，不覆盖已有技能
+        const base = (String(meta.name).replace(/[\\/:*?"<>|\r\n]+/g, '_').trim() || 'skill').slice(0, 60);
+        let target = base + '.md';
+        let dup = 2;
+        while (fs.existsSync(path.join(dir, target))) {
+          target = base + '-' + dup + '.md';
+          dup += 1;
+        }
+        fs.copyFileSync(src, path.join(dir, target));
+        imported.push(meta.name);
+      } catch (e) {
+        errors.push(path.basename(src) + ': ' + e.message);
+      }
+    }
+    return { ok: true, imported, errors };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 删除技能：仅允许技能文件夹内、扩展名合法的文件（拒绝路径分隔符与上级引用）
+ipcMain.handle('delete-skill', (_, id) => {
+  try {
+    const dir = path.resolve(getSkillsDir());
+    if (typeof id !== 'string' || !id || id.includes('..') || /[\\/]/.test(id)) {
+      return { ok: false, error: '无效的技能标识' };
+    }
+    const p = path.resolve(dir, id);
+    if (!p.startsWith(dir + path.sep) || !/\.(md|markdown|txt)$/i.test(p)) {
+      return { ok: false, error: '仅允许删除技能文件夹内的技能文件' };
+    }
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('open-skills-folder', () => {
+  const dir = getSkillsDir();
+  shell.openPath(dir);
+  return { ok: true, dir };
 });
 
 // ── IPC: 报告管理（设置页）──

@@ -89,6 +89,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="text" id="searchInput" placeholder="搜索实验..." />
           </div>
+          <button class="btn btn-ghost btn-sm" id="btnQueuePanel" disabled title="打开生成队列面板">队列</button>
           <button class="btn btn-ghost btn-sm" id="btnBatch" disabled>批量生成</button>
           <div class="window-controls">
             <button class="win-btn" id="btnMinimize" title="最小化">
@@ -497,9 +498,12 @@
             </div>
             <div class="settings-section">
               <h4>AI 润色技能（Skill）</h4>
-              <div class="form-hint">技能 = 追加给 AI 的自定义润色指令。默认技能不可删除；自定义技能留空标题则不保存。</div>
+              <div class="form-hint">技能通过导入外部 Skill 文件添加（.md/.txt，支持带 name/description frontmatter 的 SKILL.md），在此启用/禁用或删除，并在「AI 润色」面板选择使用。</div>
               <div id="skillList" class="skill-list"></div>
-              <button class="btn btn-sm btn-outline" id="btnAddSkill" type="button">＋ 新建技能</button>
+              <div class="skill-actions">
+                <button class="btn btn-sm btn-primary" id="btnImportSkill" type="button">导入 skill</button>
+                <button class="btn btn-sm btn-outline" id="btnOpenSkillsFolder" type="button">打开 skill 配置文件夹</button>
+              </div>
             </div>
           </div>
           <!-- 报告管理页 -->

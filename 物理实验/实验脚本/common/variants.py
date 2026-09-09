@@ -74,6 +74,58 @@ _TABLE_SEP_CELL = re.compile(r":?-{2,}:?")
 
 SECTIONS_MARKER = ".LAB_SECTIONS_JSON:"
 
+# AI 常见输出：$$ 定界符与公式体分行 → 合并为单行 $$公式$$
+_BLOCK_MATH_RE = re.compile(r"\$\$\s*([\s\S]*?)\s*\$\$")
+# 裸数学片段判定：含 \命令 或 ^/_ 上下标
+_MATH_TOKEN_RE = re.compile(r"\\[a-zA-Z]+|[_^]")
+# 数学候选段：连续的西文/符号段（以汉字与中文标点为边界）
+_NON_CJK_SEG_RE = re.compile(
+    u"[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\u2010-\u2027]+")
+_TRAIL_PUNCT_RE = re.compile(r"^(.+?)([.,;:]+)$")
+
+
+def _collapse_block_math(text):
+    """把跨行的 $$...$$ 合并为单行，内部换行折叠为空格。"""
+
+    def rep(m):
+        inner = " ".join(m.group(1).split())
+        return "$$" + inner + "$$" if inner else ""
+
+    return _BLOCK_MATH_RE.sub(rep, text)
+
+
+def _repair_bare_math(text):
+    """$ 区域之外、含 \\命令 或 ^/_ 的裸数学片段自动包上 $...$。
+
+    以汉字/中文标点为边界切出西文段，仅当段内含数学记号才包裹；
+    已有的 $...$ 与 $$...$$ 区域原样保留，句尾标点移到 $ 外。
+    """
+    parts = re.split(r"(\$\$[^$]*\$\$|\$[^$]*\$)", text)
+    out = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            out.append(part)
+            continue
+
+        def wrap(m):
+            seg = m.group(0)
+            if not _MATH_TOKEN_RE.search(seg):
+                return seg
+            stripped = seg.strip()
+            if not stripped:
+                return seg
+            lead = seg[:len(seg) - len(seg.lstrip())]
+            trail = seg[len(seg.rstrip()):]
+            pm = _TRAIL_PUNCT_RE.match(stripped)
+            if pm and len(pm.group(1)) > 1:
+                stripped, punct = pm.group(1), pm.group(2)
+            else:
+                punct = ""
+            return lead + "$" + stripped + "$" + punct + trail
+
+        out.append(_NON_CJK_SEG_RE.sub(wrap, part))
+    return "".join(out)
+
 
 def normalize_polish_md(text):
     """把 AI 输出的 Markdown 预处理成报告富文本（保留 $...$ 与 $$...$$ 公式）。
@@ -101,6 +153,10 @@ def normalize_polish_md(text):
     text = re.sub(r"__(.+?)__", r"\1", text)
     text = re.sub(r"(?<![\w$\\])\*([^*\n]+)\*(?![\w$])", r"\1", text)
     text = re.sub(r"`([^`\n]+)`", r"\1", text)
+    # 4.5 跨行 $$...$$ 合并为单行（AI 常见的定界符独立成行写法）
+    text = _collapse_block_math(text)
+    # 4.6 裸数学修复：$ 区域之外含 \命令 或 ^/_ 的片段包上 $...$
+    text = _repair_bare_math(text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 

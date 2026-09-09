@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('labAPI', {
   listReports: () => ipcRenderer.invoke('list-reports'),
   deleteReport: (filePath) => ipcRenderer.invoke('delete-report', filePath),
   showInFolder: (filePath) => ipcRenderer.invoke('show-in-folder', filePath),
+  // AI 润色技能文件（userData/skills）
+  listSkills: () => ipcRenderer.invoke('list-skills'),
+  importSkill: () => ipcRenderer.invoke('import-skill'),
+  deleteSkill: (id) => ipcRenderer.invoke('delete-skill', id),
+  openSkillsFolder: () => ipcRenderer.invoke('open-skills-folder'),
   // 报告预览
   docxToHtml: (filePath) => ipcRenderer.invoke('docx-to-html', filePath),
   readDocxBuffer: (filePath) => ipcRenderer.invoke('read-docx-buffer', filePath),

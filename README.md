@@ -1,71 +1,156 @@
 # 实验报告自动编写（labreport-writer）
 
-大学物理实验报告自动生成桌面应用。选择实验 → 在结构化表单里填测量数据 → 一键调用 Python 脚本、通过 Word COM 生成可提交的 `.docx` 实验报告（含公式、三线表、图表、不确定度计算），并支持 AI 润色（限定教材知识库）与措辞变体。
+面向大学物理实验课程的报告自动生成桌面应用（Windows）。用户选择实验、在结构化表单中录入测量数据，应用即调用内置 Python 脚本完成数据处理（不确定度、线性回归、图表绘制），并通过 Word COM 接口生成可直接提交的 `.docx` 报告——公式为 Word 原生可编辑数学公式（OMML），表格、插图、学生信息一应俱全。在此基础上提供措辞变体组合与 AI 个性化润色（限定教材知识库），帮助报告在保持科学性的前提下形成个人化表述。
 
-- 技术栈：Electron（主进程 Node + 渲染层原生 JS）+ Python 数据处理 + `win32com` 驱动 Word 生成 `.docx`。
-- 数据模型：每个实验以 `schema.json`（字段/类型/量纲/知识库标签）+ `data.json`（填写的数据真相）为核心，**不再用 Excel 坐标硬编码**；`generate.py` 读 `data["key"]`。
-- 知识库：每个实验 `rag/原理.md` 存教材原理，供 AI 润色作为唯一依据约束。
+**技术栈**：Electron（主进程 Node.js + 渲染层原生 JavaScript，contextIsolation + preload 桥接）· Python 数据处理与文档生成（`pywin32` 驱动 Microsoft Word）· `matplotlib` 绘图 · NSIS 安装包（electron-builder）。
 
-## 一、普通用户：下载安装包用（推荐）
+**运行要求**：Windows 10/11 · Microsoft Word 2016 及以上（报告生成依赖 Word COM 组件）。最终用户**无需安装 Python**——安装包内置嵌入式运行时与全部实验资源。
 
-1. 打开 Releases：https://github.com/muhan-ad/labreport-writer/releases
-2. 下载 `实验报告编写 Setup 1.0.0.exe`，双击安装（用户级，免管理员）。
-3. 桌面/开始菜单打开「实验报告编写」，选实验 → 填数据 → 保存 → 生成报告。
+---
 
-安装包**已内置 Python 运行时与全部实验数据/脚本/知识库**，对方机器**无需安装 Python 或任何依赖**。
+## 功能特性
 
-## 二、开发者：源码运行
+### 1. 结构化数据录入（表单式数据模型）
 
-环境要求：
-- Node.js（建议 18+）
-- 二选一：仓库根放置 `python-runtime/`（嵌入式 Python 3.14），或本机安装 **Python ≥ 3.10（建议 3.12+）** 及依赖。
+应用采用"数据与版式分离"的结构化数据模型：每个实验由 `schema.json` 定义数据字段（名称、类型、单位、必填性、数组/矩阵维度、行列标签），`data.json` 存储测量值本身。界面按 schema 自动渲染录入表单（标量、定长数组、带行列标签的矩阵），并提供必填项与格式校验。
+
+这一设计带来两个直接收益：
+
+- **模板结构与数据读取彻底解耦**：调整报告版式、图表结构不影响数据链路，`generate.py` 始终按键名读取 `data["key"]`，不存在传统方案中"改了 Excel 格子坐标脚本就崩"的问题；
+- **数据可校验、可迁移**：`validate_schema.py` 可静态检查数据完整性，缺失项在生成前即被拦截并提示。
+
+> 历史遗留的 `数据.xlsx` 模板已退出数据链路，仅作存档保留。
+
+### 2. 一键生成 Word 报告
+
+`generate.py` 读取测量数据后完成完整的数据处理流水线：间接测量量计算、A/B 类不确定度与合成不确定度、最小二乘线性回归、matplotlib 图表绘制，随后通过公共库 `DocxReportWriter`（Word COM）产出报告：
+
+- 数学公式以 LaTeX/UnicodeMath 线性格式经 `OMaths.BuildUp()` 转为 **Word 原生公式**，可二次编辑；
+- 自动注入学生信息（姓名/学号/班级/日期，来自应用内配置，经环境变量传递，未配置时以占位符代替）;
+- 数据三线表、实验插图、章节结构按课程提交规范排版（纯中文、A4、宋体/黑体）。
+
+### 3. 措辞变体系统
+
+每个实验的 `variants.json` 为报告的文字性章节（实验原理、实验方法、误差分析、结论）提供多套等价措辞（当前为每章节 5 套）。生成时可逐章节指定或随机抽取，文本支持 `$...$` 内联公式与 `%%DATA:key:format%%` 数据占位符（组合时以实际计算结果注入），使不同报告在表述层面自然分化，同时保证数值与公式严格来自本人测量数据。
+
+### 4. AI 个性化润色（知识库约束 · 技能扩展 · 导入重生成）
+
+内置 AI 润色模块，兼容 OpenAI Chat Completions 协议的任意服务商（预设 DeepSeek / 豆包 / 通义千问，可自定义）：
+
+- **限定知识库**：每个实验附带教材原理知识库（`rag/原理.md`）。开启"限定知识库"约束后，润色提示词硬性绑定该知识库为唯一权威依据——禁止引入知识库之外的公式、数据与结论，最大限度抑制模型幻觉；
+- **章节级润色与导入重生成**：对变体章节（实验原理/实验方法/误差分析/结论）的润色以生成时缓存的**章节源文**为原文（公式保持 LaTeX 原码），润色结果可一键**导入并重新生成报告**——Markdown 与 LaTeX 公式经归一化管线自动转换：`$...$`/`$$...$$` 渲染为 Word 原生公式，标题/加粗/列表等 Markdown 记号自动剥离，AI 输出中不规范的裸 LaTeX 与跨行公式块亦有自动修复兜底。数据表格、插图与数值计算不受润色影响；
+- **技能（Skill）扩展**：支持导入外部开源 Skill 文件（`.md`，兼容带 `name`/`description` frontmatter 的 SKILL.md 格式）作为自定义润色指令，在设置中按 名称–启用/禁用–删除 管理，技能文件存放于应用数据目录；
+- **写作风格**：严谨学术 / 简洁明了 / 详细充实三档基调可与技能叠加。
+
+### 5. 批量生成队列
+
+支持将多个实验加入生成队列：可视化查看与拖拽调整顺序、单项移除、暂停/恢复、一键全部取消；生成过程实时输出脚本日志，取消操作精确清理本次启动的 Word 进程（不影响用户手动打开的文档）。
+
+### 6. 报告预览与管理
+
+- 应用内 `docx-preview` 渲染报告预览，无需打开 Word 即可核对；
+- 设置 → **报告管理**：集中列出全部已生成报告（实验名、生成时间、大小），支持打开、资源管理器定位与删除（删除受服务端路径校验保护，仅限实验目录内的 `.docx`）。
+
+### 7. 自包含打包分发
+
+electron-builder NSIS 安装包：应用代码打包为 asar；`物理实验` 全部资源（脚本、schema、数据、变体、知识库）与嵌入式 Python 运行时以 extraResources 释放至**可写的安装目录**，用户级安装（免管理员权限），数据保存与报告生成均在安装目录内完成，无外部依赖。
+
+---
+
+## 当前状态与尚未完成的内容
+
+以下功能边界如实说明，避免误用：
+
+| 事项 | 状态 | 说明 |
+| --- | --- | --- |
+| **7 个实验暂无变体库** | 开发中 | 劈尖干涉、霍尔效应测量磁场、单缝衍射、理想气体状态方程、螺旋管磁场分布、电子元件伏安特性、电子束电磁偏转——这 7 个实验可正常生成报告，但章节文字为固定表述，**不支持 AI 润色"导入并重新生成"**（仅可复制润色结果手动使用），变体选择面板亦为空。补齐 `variants.json` 后即与其余 19 个实验能力对齐 |
+| **AI 润色成熟度** | 可用，有边界 | ① 润色质量取决于所配模型，提示词已硬性要求保留公式与数值，但模型遵循度非 100%，导入前建议人工核对；② "结果分析 / 全文"两个润色范围取自 docx 纯文本（表格与公式结构已丢失），**仅支持复制结果**，不支持导入重生成；③ 复杂 LaTeX 环境（`aligned`、`cases` 等）可能退化为线性公式显示；④ 润色文本中的 Markdown 表格会降级为分号分隔的文本行 |
+| **论文模板** | 未开发 | 课程论文/大报告版式（区别于实验报告）尚在等待样例定稿，当前仅支持实验报告生成 |
+| **示例数据** | 注意 | 仓库与安装包内各实验 `data.json` 均为**演示用示例数据**，生成报告前必须替换为本人真实测量值，严禁直接提交示例数据产出 |
+| **应用内使用说明** | 未开发 | 暂无内置帮助页，使用方式以本 README 为准 |
+| **平台** | 仅 Windows | 报告生成依赖 Word COM（`win32com`），无 macOS/Linux 移植计划 |
+
+---
+
+## 快速开始
+
+### 普通用户（推荐：安装包）
+
+1. 前往 [Releases](https://github.com/muhan-ad/labreport-writer/releases) 下载 `实验报告编写 Setup x.x.x.exe`；
+2. 双击安装（用户级安装，免管理员权限），从桌面/开始菜单启动；
+3. 配置学生信息（左下角）→ 选择实验 → 填写测量数据 → 保存修改 → 生成报告；
+4. 如需 AI 润色：设置中配置 API 提供商与 Key（存储于本机，见"隐私与数据"）。
+
+### 开发者（源码运行）
+
+环境要求：Node.js ≥ 18；Python 二选一——仓库根放置 `python-runtime/`（嵌入式运行时，Release 构建产物同款），或本机安装 Python ≥ 3.10（建议 3.12+）并执行 `pip install -r 物理实验/requirements.txt`（亦可直接运行 `物理实验/setup.bat`）。
 
 ```bash
 npm install
-# 若用本机 Python，先装依赖（自动探测/安装 Python + pip 依赖）：
-#   Windows: 双击 物理实验/setup.bat
-#   或:      pip install -r 物理实验/requirements.txt
 npm start
 ```
 
-`resolvePythonExe` 优先级：内置 `python-runtime` → 本机 Python（Store / 常见目录 / PATH）。
+运行时 Python 解析优先级：内置 `python-runtime` → 本机 Python（Microsoft Store / 常见安装目录 / PATH）。
 
-## 三、打包
+---
+
+## 打包与发布
 
 ```bash
 npm run build:win
 ```
-产出 `dist/实验报告编写 Setup x.x.x.exe`（NSIS 安装包）与 `dist/win-unpacked/`（绿色版）。
-`物理实验`（脚本/数据/schema/知识库/变体）与 `python-runtime` 作为 extraResources 打进可写的安装目录，实现自包含。
 
-## 四、质量校验（不启动 Word 的静态冒烟）
+产出 `dist/实验报告编写 Setup x.x.x.exe`（NSIS 安装包）与 `dist/win-unpacked/`（绿色便携版）。打包配置要点：`物理实验` 资源经 filter 排除 `*.xlsx / *.docx / *.png / __pycache__ / .lab_sections.json` 后整体释放至 `resources/`；应用自身代码进 asar。
+
+## 质量校验
 
 ```bash
-python smoke_test.py        # 26 实验：语法 / schema-data 校验 / 变体每节数与 $ 配对 / 占位符键存在 / rag 存在
-python validate_schema.py   # 各实验 data.json 相对 schema 的 missing/invalid
+python smoke_test.py        # 全实验静态回归：脚本语法 / schema-data 一致性 / 变体章节数与 $ 配对 / 占位符键存在性 / 知识库存在性
+python validate_schema.py   # 各实验 data.json 相对 schema.json 的 missing / invalid 明细
 ```
 
-## 五、项目结构
+两者均为纯静态检查，不启动 Word，可在 CI 或提交前快速执行。
+
+## 项目结构
 
 ```
-main.js / preload.js       Electron 主进程与预加载
-src/                        渲染层（index.html / renderer.js / style.css）
-物理实验/实验脚本/
-  common/                   公共库（docx_report / uncertainty / regression / latex_formatter / plot_utils / variants / data_io）
-  <实验名>/
-    generate.py             该实验数据处理 + 报告生成（读 data.json）
-    schema.json             数据模型定义（字段/类型/量纲/知识库标题）
-    data.json               测量数据（真相）
-    variants.json           报告措辞变体（可选）
-    rag/原理.md             教材原理知识库（AI 润色依据）
+main.js / preload.js          Electron 主进程（IPC：扫描/生成/润色代理/技能与报告管理）与预加载桥
+src/                          渲染层（index.html / renderer.js / style.css / 图标）
+smoke_test.py                 全实验静态回归
+validate_schema.py            schema-data 一致性校验
+物理实验/
+  requirements.txt / setup.bat  Python 依赖清单与一键安装
+  实验脚本/
+    common/                   公共库：docx_report（Word COM 报告器）/ variants（变体组合与润色注入）
+                              / uncertainty / regression / latex_formatter / plot_utils / data_io
+    <实验名>/                 共 26 个实验，每个包含：
+      generate.py             数据处理 + 报告生成入口
+      schema.json             数据模型定义
+      data.json               测量数据（示例值，使用前须替换）
+      variants.json           章节措辞变体（19/26 实验已具备）
+      rag/原理.md             教材原理知识库（AI 润色约束依据）
 ```
 
-## 六、注意事项
+## 隐私与数据
 
-- **不要直接提交安装包里的示例数据**：仓库/安装包内的 `data.json` 为**测试示例数据**，仅供演示，请勿当真实测量结果提交。
-- 学校要求提交 Word（`.docx`），纯中文；实验原理以教材为准。
-- 仓库不纳入 `node_modules/`、`python-runtime/`、`dist/`、`backup/`、生成物（`__pycache__`、`*.pyc`、报告 `*.docx`、图表 `*.png`）。
+- **学生信息、API Key、应用设置、技能启用状态、AI 润色导入文本**均存储于 Electron `localStorage`（位于 `%APPDATA%` 应用数据目录），**不写入项目目录、不进 git 仓库、不随安装包分发**；
+- API Key 仅在调用 AI 服务时经 HTTPS 发送至用户自行配置的服务商端点；
+- 技能文件存放于 `%APPDATA%/<应用>/skills/`；报告文件、章节源文缓存（`.lab_sections.json`）、图表与生成物均被 `.gitignore` 排除；
+- 仓库为私有仓库；生成报告由使用者自行负责合规提交。
+
+## 开发指引：新增一个实验
+
+1. 创建 `物理实验/实验脚本/<实验名>/`，编写 `schema.json`（字段定义）与 `data.json`（可先留 `null` 占位）；
+2. 编写 `generate.py`：`load_data()` 读取数据 → 计算 → `compose()` 组合变体 → `DocxReportWriter` 产出报告（参考现有实验的成熟范式）；
+3. 放入 `rag/原理.md`（教材原理，AI 润色知识库）；如需变体与润色导入能力，补充 `variants.json`（四章节 × N 套，`$` 公式成对、占位符键须存在于 `_compute` 返回值）；
+4. 运行 `python smoke_test.py` 确认 0 异常。
+
+## 注意事项
+
+- 学校课程要求以 Word（`.docx`）提交、纯中文行文，实验原理以教材为准；
+- 报告生成期间请勿手动结束 Word 进程；应用内"取消生成"会安全清理本次启动的 Word 实例；
+- 示例数据仅供功能演示，**严禁直接提交**。
 
 ## 许可
 
-仅用于学习交流。实验数据与公式来自西安电子科技大学物理实验课程。
+仅用于学习交流。实验数据、原理与公式来自西安电子科技大学物理实验课程。

@@ -209,7 +209,7 @@ function selectExperiment(exp) {
   $('metaReport').textContent = exp.hasReport ? '报告已生成' : '未生成';
   $('metaReport').className = 'meta-dot' + (exp.hasReport ? ' ok' : '');
 
-  $('dataFileName').textContent = exp.dataFile ? exp.dataFile.split(/[\\/]/).pop() : '（不存在）';
+  $('dataFileName').textContent = exp.dataFile ? exp.dataFile.split(/[\\/]/).pop() : 'data.json（保存后生成）';
   $('dataFilePath').textContent = exp.dataFile || '—';
 
   $('btnOpenData').disabled = !exp.hasData;
@@ -235,7 +235,7 @@ function selectExperiment(exp) {
   // 更新 AI 状态（润色对象/技能/导入提示）
   updateAiStatus();
   refreshAiScopeOptions(false);
-  renderSkillOptions(false);
+  loadSkillList();
   updateOverrideBar();
 }
 
@@ -373,7 +373,20 @@ function clearFinishedQueue() {
 }
 
 const QUEUE_STATUS_TEXT = { queued: '等待', running: '生成中…', done: '✓ 完成', failed: '✗ 失败', cancelled: '已取消' };
+// 顶栏"队列"入口：队列非空即可回到面板；运行/暂停时高亮提示
+function updateQueueEntry() {
+  const btn = $('btnQueuePanel');
+  if (!btn) return;
+  const n = genQueue.length;
+  const active = queueState === 'running' || queueState === 'paused';
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `队列 (${n})` : '队列';
+  btn.className = 'btn btn-sm ' + (active ? 'btn-primary' : 'btn-ghost');
+  btn.title = active ? '队列运行中，点击查看' : '打开生成队列面板';
+}
+
 function renderQueue() {
+  updateQueueEntry();
   const list = $('queueList'); if (!list) return;
   if (!genQueue.length) { list.innerHTML = '<div class="queue-empty">队列为空</div>'; renderQueueControls(); return; }
   let html = '';
@@ -737,9 +750,22 @@ async function refreshAiScopeOptions(keepValue) {
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 
-function getSkills() {
+// ── AI 润色技能（文件制：userData/skills，由外部 Skill 文件导入）──
+let skillsCache = [];   // [{id,name,description,content}]
+
+function getSkillStates() {
   const s = loadSettings();
-  return Array.isArray(s.skills) ? s.skills : [];
+  return (s.skillStates && typeof s.skillStates === 'object') ? s.skillStates : {};
+}
+function setSkillState(id, enabled) {
+  const s = loadSettings();
+  s.skillStates = Object.assign({}, getSkillStates());
+  s.skillStates[id] = enabled;
+  saveSettings(s);
+}
+function getEnabledSkills() {
+  const st = getSkillStates();
+  return skillsCache.filter(sk => st[sk.id] !== false);
 }
 function renderSkillOptions(keepValue) {
   const sel = $('aiSkillSel');
@@ -748,8 +774,84 @@ function renderSkillOptions(keepValue) {
   sel.innerHTML = '';
   const mk = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
   mk('', '默认技能（写作风格 + 知识库约束）');
-  getSkills().forEach((sk, i) => mk(String(i), sk.name || `技能 ${i + 1}`));
+  getEnabledSkills().forEach(sk => mk(sk.id, sk.name));
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+async function loadSkillList() {
+  try {
+    const r = await window.labAPI.listSkills();
+    skillsCache = (r && r.ok && Array.isArray(r.skills)) ? r.skills : [];
+  } catch (e) { skillsCache = []; }
+  renderSkillRows();
+  renderSkillOptions(true);
+}
+
+function renderSkillRows() {
+  const list = $('skillList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!skillsCache.length) {
+    const empty = document.createElement('div');
+    empty.className = 'skill-empty';
+    empty.textContent = '暂无技能 —— 点击下方「导入 skill」添加开源 Skill 文件（.md）';
+    list.appendChild(empty);
+    return;
+  }
+  const states = getSkillStates();
+  for (const sk of skillsCache) {
+    const row = document.createElement('div');
+    row.className = 'skill-row';
+
+    const info = document.createElement('div');
+    info.className = 'skill-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'skill-name-text';
+    nameEl.textContent = sk.name;
+    info.appendChild(nameEl);
+    if (sk.description) {
+      const d = document.createElement('div');
+      d.className = 'skill-desc';
+      d.textContent = sk.description;
+      d.title = sk.description;
+      info.appendChild(d);
+    }
+
+    const toggle = document.createElement('label');
+    toggle.className = 'checkbox-label skill-toggle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = states[sk.id] !== false;
+    cb.onchange = () => { setSkillState(sk.id, cb.checked); renderSkillOptions(true); };
+    toggle.appendChild(cb);
+    toggle.appendChild(document.createTextNode('启用'));
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn btn-sm btn-ghost skill-del';
+    del.textContent = '删除';
+    del.onclick = async () => {
+      if (!confirm('删除技能「' + sk.name + '」？\n技能文件将从配置文件夹中移除。')) return;
+      const rr = await window.labAPI.deleteSkill(sk.id);
+      if (rr && rr.ok) { showToast('success', '已删除', sk.name); await loadSkillList(); }
+      else showToast('error', '删除失败', (rr && rr.error) || '未知错误', 5000);
+    };
+
+    row.appendChild(info);
+    row.appendChild(toggle);
+    row.appendChild(del);
+    list.appendChild(row);
+  }
+}
+
+async function importSkillFiles() {
+  const r = await window.labAPI.importSkill();
+  if (!r || !r.ok) { showToast('error', '导入失败', (r && r.error) || '未知错误', 5000); return; }
+  if (r.imported && r.imported.length) {
+    showToast('success', '已导入 ' + r.imported.length + ' 个技能', r.imported.join('、'));
+    await loadSkillList();
+  }
+  if (r.errors && r.errors.length) showToast('warning', '部分导入失败', r.errors.join('；'), 6000);
 }
 
 async function runAiPolish() {
@@ -766,8 +868,8 @@ async function runAiPolish() {
 
   const style = document.querySelector('input[name="aiStyle"]:checked')?.value || 'rigorous';
   const scopeVal = $('aiScopeSel').value || 'analysis';
-  const skillIdx = $('aiSkillSel').value;
-  const skill = skillIdx === '' ? null : getSkills()[parseInt(skillIdx, 10)];
+  const skillId = $('aiSkillSel').value;
+  const skill = skillId ? skillsCache.find(s => s.id === skillId) : null;
   const kbOnly = $('chkKbOnly').checked;
 
   // 显示加载状态
@@ -814,12 +916,12 @@ async function runAiPolish() {
       ? `\n\n【知识库硬性约束——本实验教材原理是唯一权威依据】\n${ragText ? ragText.slice(0, 8000) : '（本实验未提供知识库文本）'}\n只能使用知识库与原文中有依据的表述：不得新增两者中不存在的公式、数据、常数或结论，不得凭常识臆造。${ragText ? '' : '当前无知识库：只做语言层面的改写，禁止补充任何物理内容。'}`
       : '';
 
-    const formatBlock = '\n\n【输出格式硬性要求】只输出改写后的正文（Markdown）：公式必须保持 $...$（行内）或 $$...$$（独立行）的 LaTeX 形式，与原文公式内容一致；不得改变任何数值、单位与变量符号；不要输出章节编号标题（如"一、"），不要输出任何解释。';
+    const formatBlock = '\n\n【输出格式硬性要求】只输出改写后的正文（Markdown）：任何数学表达（含 \\pi、\\Delta 等符号和上下标）一律用 $...$ 包裹，独立公式用单行 $$...$$（定界符与公式同一行）；不得输出裸的 \\frac、^、_ 等未包裹的 LaTeX；不得改变任何数值、单位与变量符号；不要输出章节编号标题（如"一、"），不要输出任何解释。';
 
     const messages = [
       {
         role: 'system',
-        content: `你是一个大学物理实验报告润色助手。${getAiStylePrompt(style)}${skill && skill.prompt ? `\n【当前技能指令（优先遵循）】${skill.prompt}` : ''}请对用户提供的实验报告内容进行个性化改写，保持科学准确性和数据真实性，避免与原文措辞重复，使报告更具个人特色，降低重复检测风险。只输出改写后的内容，不要输出解释或说明。${formatBlock}${kbBlock}`,
+        content: `你是一个大学物理实验报告润色助手。${getAiStylePrompt(style)}${skill && skill.content ? `\n【当前技能指令（优先遵循）】${skill.content.slice(0, 4000)}` : ''}请对用户提供的实验报告内容进行个性化改写，保持科学准确性和数据真实性，避免与原文措辞重复，使报告更具个人特色，降低重复检测风险。只输出改写后的内容，不要输出解释或说明。${formatBlock}${kbBlock}`,
       },
       {
         role: 'user',
@@ -1066,6 +1168,7 @@ function bindEvents() {
 
   // 批量生成（预留）
   $('btnBatch').onclick = runBatchGenerate;
+  $('btnQueuePanel').onclick = openQueuePanel;
   $('btnSelectAll').onclick = toggleSelectAll;
   $('btnBatchClose').onclick = () => {
     $('batchPanel').style.display = 'none';
@@ -1139,10 +1242,11 @@ function bindEvents() {
     s.kbOnly = $('chkKbOnly').checked;
     saveSettings(s);
   };
-  $('btnAddSkill').onclick = addSkillRow;
+  $('btnImportSkill').onclick = importSkillFiles;
+  $('btnOpenSkillsFolder').onclick = () => window.labAPI.openSkillsFolder();
   // 润色面板初始状态（实验相关部分由 selectExperiment 刷新）
   $('chkKbOnly').checked = loadSettings().kbOnly !== false;
-  renderSkillOptions(false);
+  loadSkillList();
   refreshAiScopeOptions(false);
 }
 
@@ -1259,69 +1363,6 @@ async function loadReportsList() {
   }
 }
 
-// ── AI 润色技能设置（设置弹窗列表；内置默认行不可删） ──
-function renderSkillSettings(skills) {
-  const list = $('skillList');
-  if (!list) return;
-  list.innerHTML = '';
-  const finishRow = (div, name, prompt, removable) => {
-    const nameIn = document.createElement('input');
-    nameIn.type = 'text'; nameIn.className = 'skill-name'; nameIn.placeholder = '技能名称';
-    nameIn.value = name;
-    const ta = document.createElement('textarea');
-    ta.className = 'skill-prompt'; ta.rows = 3;
-    ta.placeholder = '润色时注入的系统指令，如：以学生的口吻改写，多用短句，避免华丽修辞；公式一律保持 $...$ 形式不得改动';
-    ta.value = prompt;
-    div.appendChild(nameIn);
-    div.appendChild(ta);
-    if (removable) {
-      const del = document.createElement('button');
-      del.type = 'button'; del.className = 'btn btn-sm btn-ghost skill-del'; del.textContent = '删除';
-      del.onclick = () => div.remove();
-      div.appendChild(del);
-    } else {
-      nameIn.disabled = true; ta.disabled = true; ta.placeholder = '内置行为：写作风格单选 + 知识库硬性约束';
-      const tag = document.createElement('span');
-      tag.className = 'skill-locked'; tag.textContent = '内置';
-      div.appendChild(tag);
-    }
-    list.appendChild(div);
-  };
-  finishRow(Object.assign(document.createElement('div'), { className: 'skill-row skill-default' }), '默认（写作风格 + 知识库约束）', '', false);
-  (Array.isArray(skills) ? skills : []).forEach(sk => {
-    finishRow(document.createElement('div'), sk.name || '', sk.prompt || '', true);
-  });
-}
-
-function collectSkillSettings() {
-  const out = [];
-  document.querySelectorAll('#skillList .skill-row').forEach(div => {
-    if (div.classList.contains('skill-default')) return;
-    const name = div.querySelector('.skill-name').value.trim();
-    const prompt = div.querySelector('.skill-prompt').value.trim();
-    if (name) out.push({ name, prompt });
-  });
-  return out;
-}
-
-function addSkillRow() {
-  const list = $('skillList');
-  if (!list) return;
-  const div = document.createElement('div');
-  div.className = 'skill-row';
-  const nameIn = document.createElement('input');
-  nameIn.type = 'text'; nameIn.className = 'skill-name'; nameIn.placeholder = '技能名称';
-  const ta = document.createElement('textarea');
-  ta.className = 'skill-prompt'; ta.rows = 3;
-  ta.placeholder = '自定义润色指令';
-  const del = document.createElement('button');
-  del.type = 'button'; del.className = 'btn btn-sm btn-ghost skill-del'; del.textContent = '删除';
-  del.onclick = () => div.remove();
-  div.appendChild(nameIn); div.appendChild(ta); div.appendChild(del);
-  list.appendChild(div);
-  nameIn.focus();
-}
-
 // ── 导入润色结果并重新生成报告 ──
 async function importPolishAndRegenerate() {
   if (!currentExp) return;
@@ -1343,7 +1384,7 @@ function loadSettingsForm() {
   $('inputApiUrl').value = s.apiUrl || '';
   $('chkAiPolish').checked = !!s.aiPolish;
   $('chkKbOnly').checked = s.kbOnly !== false;
-  renderSkillSettings(s.skills || []);
+  loadSkillList();
   renderModelChips();
 }
 
@@ -1386,7 +1427,7 @@ function saveAppSettings() {
     apiUrl: $('inputApiUrl').value.trim(),
     aiPolish: $('chkAiPolish').checked,
     kbOnly: $('chkKbOnly').checked,
-    skills: collectSkillSettings(),
+    skillStates: getSkillStates(),
   };
   saveSettings(settings);
   closeModal('settingsModal');
