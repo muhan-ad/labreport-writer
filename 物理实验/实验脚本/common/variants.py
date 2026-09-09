@@ -55,15 +55,65 @@ def render_variant(text: str, data: dict) -> str:
     return DATA_PATTERN.sub(repl, text)
 
 
-def compose(script_dir: str, data: dict) -> dict:
-    """按 LAB_VARIANTS 选择组合各章节文本。
+def get_polish_overrides():
+    """读取环境变量 LAB_POLISH 中的润色导入（JSON {章节名: Markdown 文本}）。"""
+    raw = os.environ.get("LAB_POLISH", "").strip()
+    if not raw:
+        return None
+    try:
+        d = json.loads(raw)
+        return d if isinstance(d, dict) else None
+    except Exception:
+        return None
 
-    返回 {章节名: 渲染后文本}；仅包含被选中的章节。
-    无 variants.json 或 LAB_VARIANTS 未给出该章节选择时，该章节不会出现在结果中。
+
+_HEADING_RE = re.compile(r"(?m)^[ \t]*#{1,6}[ \t]*")
+_BULLET_RE = re.compile(r"(?m)^[ \t]*[-*+][ \t]+")
+_HR_RE = re.compile(r"(?m)^[ \t]*[-=*_]{3,}[ \t]*$")
+_TABLE_SEP_CELL = re.compile(r":?-{2,}:?")
+
+SECTIONS_MARKER = ".LAB_SECTIONS_JSON:"
+
+
+def normalize_polish_md(text):
+    """把 AI 输出的 Markdown 预处理成报告富文本（保留 $...$ 与 $$...$$ 公式）。
+
+    处理：markdown 表格降级为分号文本行、\\( \\) 与 \\[ \\] 归一为 $ 与 $$、
+    逐行剥离标题井号/列表符/分割线/引用符、去粗斜体与行内代码标记。
     """
-    variants = load_variants(script_dir)
-    if not variants:
-        return {}
+    lines = []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith("|") or s.endswith("|"):
+            cells = [c.strip() for c in s.strip("|").split("|")]
+            if all(not c or _TABLE_SEP_CELL.fullmatch(c) for c in cells):
+                continue  # 表头分隔行整行丢弃
+            ln = "；".join(c for c in cells if c)
+        lines.append(ln)
+    text = "\n".join(lines)
+    text = text.replace(r"\[", "$$").replace(r"\]", "$$")
+    text = text.replace(r"\(", "$").replace(r"\)", "$")
+    text = _HEADING_RE.sub("", text)
+    text = _BULLET_RE.sub("", text)
+    text = _HR_RE.sub("", text)
+    text = re.sub(r"(?m)^[ \t]*>[ \t]?", "", text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"(?<![\w$\\])\*([^*\n]+)\*(?![\w$])", r"\1", text)
+    text = re.sub(r"`([^`\n]+)`", r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def compose(script_dir: str, data: dict) -> dict:
+    """按 LAB_VARIANTS 组合各章节文本，并应用 LAB_POLISH 润色导入覆盖。
+
+    返回 {章节名: 渲染后文本}。LAB_POLISH 中提供的章节以润色文本覆盖变体
+    （Markdown 先归一为报告富文本，%%DATA:%% 占位符对两者同样生效）。
+    同时向 stdout 打印一行 SECTIONS_MARKER + JSON，由应用侧捕获并持久化为
+    章节缓存（.lab_sections.json），供"按章节润色/导入重生成"读取原文。
+    """
+    variants = load_variants(script_dir) or {}
     choices = get_variant_choices()
     out = {}
     for section, texts in variants.items():
@@ -75,6 +125,12 @@ def compose(script_dir: str, data: dict) -> dict:
                 idx = -1
         if 0 <= idx < len(texts):
             out[section] = render_variant(texts[idx], data)
+    for section, md in (get_polish_overrides() or {}).items():
+        if not isinstance(md, str) or not md.strip():
+            continue
+        out[section] = render_variant(normalize_polish_md(md), data)
+    if out:
+        print(SECTIONS_MARKER + json.dumps(out, ensure_ascii=False), flush=True)
     return out
 
 

@@ -49,6 +49,7 @@
           "!**/*.xls",
           "!**/*.docx",
           "!**/*.png",
+          "!**/.lab_sections.json",
           "!**/__pycache__/**"
         ]
       }

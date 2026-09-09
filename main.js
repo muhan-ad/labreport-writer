@@ -259,6 +259,70 @@ ipcMain.handle('write-data', (_, expPath, data) => {
   }
 });
 
+// ── IPC: 读取章节原文缓存（AI 按章节润色的数据源，由 run-generate 落盘）──
+ipcMain.handle('read-sections', (_, expPath) => {
+  try {
+    const p = path.join(expPath, '.lab_sections.json');
+    if (!fs.existsSync(p)) return { ok: true, sections: null };
+    return { ok: true, sections: JSON.parse(fs.readFileSync(p, 'utf-8')) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// ── IPC: 报告管理（设置页）──
+// 列出全部实验目录下已生成的 .docx（含大小/修改时间），按时间倒序
+ipcMain.handle('list-reports', () => {
+  const out = [];
+  try {
+    if (!fs.existsSync(EXPERIMENTS_DIR)) return { ok: true, reports: out };
+    const dirs = fs.readdirSync(EXPERIMENTS_DIR, { withFileTypes: true });
+    for (const d of dirs) {
+      if (!d.isDirectory() || d.name === 'common') continue;
+      const expPath = path.join(EXPERIMENTS_DIR, d.name);
+      let files;
+      try { files = fs.readdirSync(expPath); } catch (e) { continue; }
+      for (const f of files) {
+        if (!f.toLowerCase().endsWith('.docx') || f.startsWith('~$')) continue;
+        try {
+          const st = fs.statSync(path.join(expPath, f));
+          out.push({ exp: d.name, file: f, path: path.join(expPath, f), size: st.size, mtime: st.mtimeMs });
+        } catch (e) { /* 单个文件异常跳过 */ }
+      }
+    }
+    out.sort((a, b) => b.mtime - a.mtime);
+    return { ok: true, reports: out };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 删除报告：仅允许删除实验目录之内的 .docx（规范化路径并校验包含关系）
+ipcMain.handle('delete-report', (_, filePath) => {
+  try {
+    if (typeof filePath !== 'string' || !filePath) return { ok: false, error: '无效路径' };
+    const p = path.resolve(filePath);
+    const root = path.resolve(EXPERIMENTS_DIR);
+    if (!p.toLowerCase().endsWith('.docx')) return { ok: false, error: '仅允许删除 .docx 报告' };
+    if (p !== root && !p.startsWith(root + path.sep)) return { ok: false, error: '仅允许删除实验目录内的报告' };
+    if (!fs.existsSync(p)) return { ok: true, alreadyGone: true };
+    fs.unlinkSync(p);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 在资源管理器中定位文件
+ipcMain.handle('show-in-folder', (_, filePath) => {
+  try {
+    if (fs.existsSync(filePath)) shell.showItemInFolder(filePath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 // ── IPC: 读取实验知识库(原理) —— AI 润色限定依据 ──
 ipcMain.handle('read-rag', (_, expPath) => {
   try {
@@ -302,7 +366,9 @@ ipcMain.handle('open-file', (_, filePath) => {
 });
 
 // ── IPC: 运行 generate.py 生成报告 ──
-ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants) => {
+// variants.compose 向 stdout 打印的章节原文标记（供应用侧按章节润色/导入重生成）
+const SECTIONS_MARKER = '.LAB_SECTIONS_JSON:';
+ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants, polish) => {
   const generatePy = path.join(expPath, 'generate.py');
   if (!fs.existsSync(generatePy)) {
     return { ok: false, error: 'generate.py 不存在', logs: [] };
@@ -320,6 +386,10 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants) => {
   if (variants && Object.keys(variants).length > 0) {
     env.LAB_VARIANTS = JSON.stringify(variants);
   }
+  // AI 润色导入（{章节: Markdown 文本}），由 compose() 注入覆盖对应变体章节
+  if (polish && typeof polish === 'object' && Object.keys(polish).length > 0) {
+    env.LAB_POLISH = JSON.stringify(polish);
+  }
 
   // 解析真实可用的 python.exe 直接 spawn（优先 Store Python，排除沙箱路径，不依赖 cmd.exe）
   const pythonExe = resolvePythonExe() || 'python';
@@ -329,6 +399,8 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants) => {
 
   return new Promise((resolve) => {
     const logs = [];
+    let capturedSections = null;   // compose() 打印的章节原文缓存
+    let stdoutCarry = '';          // 跨 chunk 的行缓冲（标记行可能分块到达）
     const python = spawn(pythonExe, [generatePy], {
       cwd: expPath,
       shell: false,
@@ -337,9 +409,21 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants) => {
     activePython = python;
 
     python.stdout.on('data', (data) => {
-      logs.push(data.toString());
-      if (mainWindow) {
-        mainWindow.webContents.send('generate-log', data.toString());
+      // 按行处理：截出章节缓存标记行（不进入展示日志），其余原样转发
+      const lines = (stdoutCarry + data.toString()).split(/\r?\n/);
+      stdoutCarry = lines.pop();
+      const keep = [];
+      for (const ln of lines) {
+        if (ln.startsWith(SECTIONS_MARKER)) {
+          try { capturedSections = JSON.parse(ln.slice(SECTIONS_MARKER.length)); } catch (e) { /* 坏行忽略 */ }
+        } else {
+          keep.push(ln);
+        }
+      }
+      if (keep.length) {
+        const out = keep.join('\n') + '\n';
+        logs.push(out);
+        if (mainWindow) mainWindow.webContents.send('generate-log', out);
       }
     });
     python.stderr.on('data', (data) => {
@@ -351,6 +435,21 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants) => {
 
     python.on('close', (code) => {
       if (activePython === python) activePython = null;
+      // 冲刷行缓冲（子进程输出末尾可能无换行）
+      if (stdoutCarry) {
+        if (stdoutCarry.startsWith(SECTIONS_MARKER)) {
+          try { capturedSections = JSON.parse(stdoutCarry.slice(SECTIONS_MARKER.length)); } catch (e) { /* 坏行忽略 */ }
+        } else {
+          logs.push(stdoutCarry);
+        }
+        stdoutCarry = '';
+      }
+      // 章节原文缓存落盘（dev=项目目录；打包=可写安装目录），供重启后润色读取
+      if (capturedSections && typeof capturedSections === 'object') {
+        try {
+          fs.writeFileSync(path.join(expPath, '.lab_sections.json'), JSON.stringify(capturedSections, null, 1), 'utf-8');
+        } catch (e) { /* 缓存失败不影响生成结果 */ }
+      }
       // 扫描生成的 docx
       let reportFile = null;
       const files = fs.readdirSync(expPath);
@@ -368,6 +467,7 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants) => {
         cancelled: activeCancelled,
         logs: logs.join(''),
         reportFile,
+        sections: capturedSections || undefined,
         error: !ok && code === 0 && !reportFile
           ? '未生成报告文件，请查看日志中的缺失提示（通常为测量数据未填写完整）'
           : undefined,

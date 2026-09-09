@@ -44,6 +44,30 @@ def _text_mode_replace(m: re.Match) -> str:
     return '"' + content + '"'
 
 
+def split_rich_blocks(text: str) -> list[tuple[str, str]]:
+    """把富文本（可能含 Markdown 换行）拆为写入操作序列 [(kind, content)]。
+
+    kind='math'：独立公式块（$$...$$），kind='para'：普通段落（可含 $..$ 内联式）。
+    段落以换行分隔；段内残留的行中 $$..$$ 降级为 $..$ 内联公式，避免破坏版式。
+    单行无 $$ 的文本输出与旧行为完全一致（恰好一个 para 操作）。
+    """
+    ops = []
+    for block in re.split(r"\n+", (text or "").strip()):
+        b = block.strip()
+        if not b:
+            continue
+        if (b.startswith("$$") and b.endswith("$$") and len(b) > 4
+                and "$$" not in b[2:-2]):
+            expr = b[2:-2].strip()
+            if expr:
+                ops.append(("math", expr))
+            continue
+        b = re.sub(r"\$\$([^$]*)\$\$", r"$\1$", b)
+        if b.strip():
+            ops.append(("para", b))
+    return ops
+
+
 def _get_word_pids() -> set:
     """枚举当前所有 WINWORD.EXE 进程 PID（tasklist，纯标准库）。"""
     try:
@@ -192,13 +216,8 @@ class DocxReportWriter:
         self._type_paragraph(text, font_name="宋体", font_size=self._body_font_size,
                              first_line_indent=21.0)
 
-    def add_paragraph_rich(self, text: str):
-        """富文本正文段落：自动解析 $...$ 内联公式（LaTeX → Word 原生公式）。
-
-        用于变体章节等含公式的整段文字：普通文字用宋体正文（首行缩进），
-        $...$ 部分转为 Word 数学公式随文字流动。无公式时与 add_paragraph 等价。
-        """
-        import re
+    def _begin_rich_paragraph(self):
+        """另起一个富文本段落（左对齐、首行缩进），光标留在段尾。"""
         self._goto_end()
         self._sel.TypeParagraph()
         self._sel.Paragraphs.Last.Range.Select()
@@ -209,14 +228,27 @@ class DocxReportWriter:
         pf.FirstLineIndent = 21.0
         self._sel.Collapse(Direction=wdCollapseEnd)
 
-        for part in re.split(r"(\$[^$]*\$)", text):
-            if not part:
+    def add_paragraph_rich(self, text: str):
+        """富文本正文（Markdown 兼容）：自动分段并解析 $...$ 内联公式。
+
+        变体/AI 润色章节整段文字的统一入口：按换行拆段，$$...$$ 独立公式块
+        转为居中显示公式（add_math），$...$ 内联公式随文字流动（add_inline_math），
+        普通文字宋体正文（首行缩进）。单行纯文本时与 add_paragraph 等价。
+        """
+        for kind, content in split_rich_blocks(text):
+            if kind == "math":
+                self.add_math(content)
                 continue
-            if part.startswith("$") and part.endswith("$") and len(part) > 2:
-                self.add_inline_math(part)
-            else:
-                self.add_run(part)
-        self._sel.Collapse(Direction=wdCollapseEnd)
+            self._begin_rich_paragraph()
+            for part in re.split(r"(\$[^$]*\$)", content):
+                if not part:
+                    continue
+                if part.startswith("$") and part.endswith("$") and len(part) > 2:
+                    self.add_inline_math(part)
+                else:
+                    self.add_run(part)
+            self._sel.Collapse(Direction=wdCollapseEnd)
+            self._goto_end()
 
     def add_math(self, latex: str):
         """插入 LaTeX 公式并转为 Word 原生数学公式（display 模式）。

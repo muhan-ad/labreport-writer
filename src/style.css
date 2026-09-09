@@ -2234,3 +2234,52 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .docx-html-preview td, .docx-html-preview th { border: 1px solid #d6d3d1; padding: 4px 8px; }
 .docx-html-preview img { max-width: 100%; }
 .preview-note { text-align: center; color: #a8a29e; font-size: 12px; padding: 8px; }
+
+/* ── AI 润色：对象/技能下拉、导入提示条、技能设置 ── */
+.ai-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border, #d6d3d1);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: #333;
+}
+.ai-option-note { display: block; font-size: 12px; color: var(--text-muted, #a8a29e); margin-top: 4px; line-height: 1.5; }
+.ai-override-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #f0f9f4;
+  border: 1px solid #bfe3cf;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #178a4c;
+}
+.skill-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.skill-row {
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--border, #e7e5e4);
+  border-radius: 8px;
+  background: #fafaf9;
+}
+.skill-row.skill-default { background: #f5f5f4; }
+.skill-name { padding: 6px 8px; border: 1px solid var(--border, #d6d3d1); border-radius: 6px; font-size: 13px; }
+.skill-prompt { width: 100%; padding: 6px 8px; border: 1px solid var(--border, #d6d3d1); border-radius: 6px; font-size: 13px; resize: vertical; font-family: inherit; }
+.skill-locked { font-size: 12px; color: var(--text-muted, #a8a29e); padding-top: 8px; }
+
+/* ── 设置 · 报告管理 ── */
+.reports-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; max-height: 380px; overflow-y: auto; }
+.report-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--border, #e7e5e4); border-radius: 8px; background: #fff; }
+.report-info { min-width: 0; flex: 1; }
+.report-name { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.report-meta { font-size: 12px; color: var(--text-muted, #a8a29e); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.report-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.report-del:hover { color: #dc2626; }

@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('labAPI', {
   scanExperiments: () => ipcRenderer.invoke('scan-experiments'),
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
-  runGenerate: (expPath, studentInfo, variants) => ipcRenderer.invoke('run-generate', expPath, studentInfo, variants),
+  runGenerate: (expPath, studentInfo, variants, polish) => ipcRenderer.invoke('run-generate', expPath, studentInfo, variants, polish),
   cancelGenerate: () => ipcRenderer.invoke('cancel-generate'),
   onGenerateLog: (callback) => {
     ipcRenderer.on('generate-log', (_, data) => callback(data));
@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('labAPI', {
   readData: (expPath) => ipcRenderer.invoke('read-data', expPath),
   writeData: (expPath, data) => ipcRenderer.invoke('write-data', expPath, data),
   readRag: (expPath) => ipcRenderer.invoke('read-rag', expPath),
+  readSections: (expPath) => ipcRenderer.invoke('read-sections', expPath),
+  // 报告管理（设置页）
+  listReports: () => ipcRenderer.invoke('list-reports'),
+  deleteReport: (filePath) => ipcRenderer.invoke('delete-report', filePath),
+  showInFolder: (filePath) => ipcRenderer.invoke('show-in-folder', filePath),
   // 报告预览
   docxToHtml: (filePath) => ipcRenderer.invoke('docx-to-html', filePath),
   readDocxBuffer: (filePath) => ipcRenderer.invoke('read-docx-buffer', filePath),
