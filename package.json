@@ -59,7 +59,8 @@
           "target": "nsis",
           "arch": ["x64"]
         }
-      ]
+      ],
+      "icon": "src/icon.ico"
     },
     "nsis": {
       "oneClick": false,
