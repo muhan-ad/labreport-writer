@@ -34,3 +34,9 @@ backup-*/
 *.tar.gz
 .mimosa/
 # 注：data.json / schema.json / variants.json / rag/ 是运行所需数据与知识库，保持入库
+
+# Python 字节码与运行时生成产物，不入库
+__pycache__/
+*.pyc
+物理实验/实验脚本/**/*.png
+物理实验/实验脚本/**/*.docx

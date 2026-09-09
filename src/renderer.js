@@ -1084,7 +1084,6 @@ function loadSettingsForm() {
   $('inputModel').value = s.model || '';
   $('inputApiUrl').value = s.apiUrl || '';
   $('chkAiPolish').checked = !!s.aiPolish;
-  $('chkAutoOpen').checked = s.autoOpen === true;
   renderModelChips();
 }
 
@@ -1126,7 +1125,6 @@ function saveAppSettings() {
     model: $('inputModel').value.trim(),
     apiUrl: $('inputApiUrl').value.trim(),
     aiPolish: $('chkAiPolish').checked,
-    autoOpen: $('chkAutoOpen').checked,
   };
   saveSettings(settings);
   closeModal('settingsModal');
@@ -1241,11 +1239,6 @@ async function runGenerateReport(btn, genExpId) {
     // 若用户仍停留在发起生成的实验，则刷新其结果区；中途切换则不影响当前页面
     if (updated && currentExp && currentExp.id === genExpId) {
       refreshExperimentAfterGenerate(updated);
-    }
-    // 自动打开报告（打开发起实验的报告，与当前选中无关）
-    const settings = loadSettings();
-    if (settings.autoOpen === true && updated && updated.reportFile) {
-      setTimeout(() => window.labAPI.openFile(updated.reportFile), 500);
     }
     // 刷新预览
     previewLoaded = false;
