@@ -1,0 +1,21 @@
+{
+  "实验": "电容与高电阻的测量",
+  "groups": [
+    {
+      "name": "表 1 数字式冲击法测量电容值",
+      "fields": [
+        {"key": "c_n", "label": "给定标准电容 C_N", "type": "number", "unit": "μF", "default": 1.0, "required": true},
+        {"key": "q_n", "label": "标准电容电量 Q_N", "type": "array", "length": 8, "unit": "μC", "required": true},
+        {"key": "q_x", "label": "被测电容电量 Q_x", "type": "array", "length": 8, "unit": "μC", "required": true}
+      ]
+    },
+    {
+      "name": "表 2 数字式冲击电流计测高阻",
+      "fields": [
+        {"key": "r_0", "label": "高电阻标称值 R_0", "type": "number", "unit": "MΩ", "default": 10, "required": true},
+        {"key": "t_values", "label": "放电时间 t", "type": "array", "length": 16, "unit": "s", "required": true},
+        {"key": "q_values", "label": "对应电量 Q", "type": "array", "length": 16, "unit": "μC", "required": true}
+      ]
+    }
+  ]
+}

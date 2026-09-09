@@ -1,0 +1,6 @@
+# 物理实验报告自动化 — Python 依赖
+# pip install -r requirements.txt
+openpyxl>=3.0
+matplotlib>=3.5
+python-docx>=1.0
+pywin32>=305

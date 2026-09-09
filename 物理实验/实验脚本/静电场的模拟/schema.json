@@ -1,0 +1,12 @@
+{
+  "实验": "静电场的模拟",
+  "groups": [
+    {
+      "name": "等势线半径测量（同轴电缆，7 个等势点）",
+      "fields": [
+        {"key": "u_r", "label": "等势线电压 U_r", "type": "array", "length": 7, "unit": "V", "required": true, "default": [7, 6, 5, 4, 3, 2, 1]},
+        {"key": "r", "label": "等势线半径 r", "type": "array", "length": 7, "unit": "cm", "required": true, "default": [1.65, 2.11, 2.65, 3.28, 3.95, 4.71, 5.52]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "实验": "RLC电路的稳态特性研究实验",
+  "groups": [
+    {
+      "name": "给定量",
+      "fields": [
+        {"key": "L", "label": "电感 L", "type": "number", "unit": "mH", "required": true},
+        {"key": "C", "label": "电容 C", "type": "number", "unit": "μF", "required": true},
+        {"key": "R", "label": "取样电阻 R", "type": "number", "unit": "Ω", "required": true},
+        {"key": "f0p", "label": "实测谐振频率 f₀'", "type": "number", "unit": "kHz", "required": true}
+      ]
+    },
+    {
+      "name": "表1 幅频特性测量（13 行 × [f / kHz, Uᵢ / V, V_R / V]）",
+      "fields": [
+        {"key": "t1", "label": "幅频特性数据", "type": "matrix", "rows": 13, "cols": 3, "required": true, "default": null,
+         "rowLabels": ["第1点", "第2点", "第3点", "第4点", "第5点", "第6点", "第7点", "第8点", "第9点", "第10点", "第11点", "第12点", "第13点"],
+         "colLabels": ["f/kHz", "Ui/V", "VR/V"]}
+      ]
+    },
+    {
+      "name": "表2 相频特性测量（13 行 × [f / kHz, A格 Uᵢ / V, B格 U_R / V]）",
+      "fields": [
+        {"key": "t2", "label": "相频特性数据", "type": "matrix", "rows": 13, "cols": 3, "required": true, "default": null,
+         "rowLabels": ["第1点", "第2点", "第3点", "第4点", "第5点", "第6点", "第7点", "第8点", "第9点", "第10点", "第11点", "第12点", "第13点"],
+         "colLabels": ["f/kHz", "A格 Ui/V", "B格 UR/V"]}
+      ]
+    }
+  ]
+}

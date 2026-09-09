@@ -1,0 +1,18 @@
+{
+  "实验": "劈尖干涉",
+  "groups": [
+    {
+      "name": "暗纹位置读数（8 次，k = 0~70）",
+      "fields": [
+        {"key": "x_k", "label": "暗纹位置读数 x_k", "type": "array", "length": 8, "unit": "mm", "required": true}
+      ]
+    },
+    {
+      "name": "劈尖长度测量",
+      "fields": [
+        {"key": "X1", "label": "劈尖棱边读数 X₁", "type": "number", "unit": "mm", "required": true},
+        {"key": "X2", "label": "细丝位置读数 X₂", "type": "number", "unit": "mm", "required": true}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "name": "labreport-writer",
+  "version": "1.0.0",
+  "description": "大学物理实验报告自动编写应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win"
+  },
+  "keywords": [
+    "物理实验",
+    "报告生成",
+    "Electron"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "docx-preview": "^0.4.0",
+    "mammoth": "^1.12.2"
+  },
+  "build": {
+    "appId": "com.labreport.writer",
+    "productName": "实验报告编写",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "python-runtime",
+        "to": "python-runtime"
+      },
+      {
+        "from": "物理实验",
+        "to": "物理实验",
+        "filter": [
+          "**/*",
+          "!**/*.xlsx",
+          "!**/*.xls",
+          "!**/*.docx",
+          "!**/*.png",
+          "!**/__pycache__/**"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "实验报告编写"
+    }
+  }
+}

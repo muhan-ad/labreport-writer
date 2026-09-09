@@ -1,0 +1,44 @@
+{
+  "实验": "长度与体积的测量",
+  "groups": [
+    {
+      "name": "仪器误差",
+      "fields": [
+        {"key": "dl_inst", "label": "米尺允许误差 ΔL", "type": "number", "unit": "mm", "default": 0.2, "required": true},
+        {"key": "dd_inst", "label": "游标卡尺分度值 ΔD", "type": "number", "unit": "mm", "default": 0.02, "required": true},
+        {"key": "dd_shi_inst", "label": "千分尺示值误差 Δd", "type": "number", "unit": "mm", "default": 0.004, "required": true},
+        {"key": "dx_inst", "label": "测量显微镜分度值 Δx", "type": "number", "unit": "mm", "default": 0.01, "required": true}
+      ]
+    },
+    {
+      "name": "零点读数",
+      "fields": [
+        {"key": "d0", "label": "螺旋测微计零点读数 d₀", "type": "number", "unit": "mm", "default": -0.005, "required": false},
+        {"key": "d0_card", "label": "游标卡尺零点读数 D₀", "type": "number", "unit": "mm", "default": 0.0, "required": false}
+      ]
+    },
+    {
+      "name": "板长与板宽（米尺，各 1 次）",
+      "fields": [
+        {"key": "L", "label": "板长 L", "type": "number", "unit": "mm", "default": 60.0, "required": true},
+        {"key": "W", "label": "板宽 W", "type": "number", "unit": "mm", "default": 40.0, "required": true}
+      ]
+    },
+    {
+      "name": "孔径与板厚（游标卡尺 / 千分尺，各 5 次）",
+      "fields": [
+        {"key": "D", "label": "孔径 D", "type": "array", "length": 5, "unit": "mm", "required": true, "default": [8.02, 8.0, 8.03, 8.01, 8.02]},
+        {"key": "d_shi", "label": "板厚 d", "type": "array", "length": 5, "unit": "mm", "required": true, "default": [2.006, 2.004, 2.005, 2.007, 2.006]}
+      ]
+    },
+    {
+      "name": "缝长缝宽读数（测量显微镜，5 对）",
+      "fields": [
+        {"key": "X0", "label": "缝长起点 X₀", "type": "array", "length": 5, "unit": "mm", "required": true, "default": [10.0, 10.0, 10.001, 10.0, 10.0]},
+        {"key": "X1", "label": "缝长终点 X₁", "type": "array", "length": 5, "unit": "mm", "required": true, "default": [30.014, 30.01, 30.012, 30.013, 30.011]},
+        {"key": "Y0", "label": "缝宽起点 Y₀", "type": "array", "length": 5, "unit": "mm", "required": true, "default": [12.0, 12.001, 12.0, 12.0, 12.001]},
+        {"key": "Y1", "label": "缝宽终点 Y₁", "type": "array", "length": 5, "unit": "mm", "required": true, "default": [13.002, 13.0, 13.001, 13.003, 13.001]}
+      ]
+    }
+  ]
+}

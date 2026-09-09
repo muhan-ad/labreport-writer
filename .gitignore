@@ -1,0 +1,36 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+out/
+build/
+
+# 日志
+*.log
+npm-debug.log*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.bak
+*.old
+
+# 保留 lock-config.json（锁定配置，需要同步）
+# 不要排除 lock-config.json
+
+# 方式三：嵌入式 Python 运行时、本地备份/临时产物体积大，不入库
+python-runtime/
+backup-*/
+*.tar.gz
+.mimosa/
+# 注：data.json / schema.json / variants.json / rag/ 是运行所需数据与知识库，保持入库

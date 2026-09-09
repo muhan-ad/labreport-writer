@@ -1,0 +1,26 @@
+{
+  "实验": "低电阻的测量",
+  "groups": [
+    {
+      "name": "电桥参数",
+      "fields": [
+        {"key": "R_1", "label": "比例臂电阻 R₁", "type": "number", "unit": "Ω", "default": 1000, "required": true},
+        {"key": "R_3", "label": "比例臂电阻 R₃", "type": "number", "unit": "Ω", "default": 100, "required": true}
+      ]
+    },
+    {
+      "name": "金属丝直径（螺旋测微计，6 次）",
+      "fields": [
+        {"key": "d", "label": "金属丝直径 d", "type": "array", "length": 6, "unit": "mm", "required": true, "default": [3.958, 3.955, 3.956, 3.951, 3.953, 3.952]}
+      ]
+    },
+    {
+      "name": "双臂电桥读数（8 个长度点，正反向）",
+      "fields": [
+        {"key": "L", "label": "金属丝长度 L", "type": "array", "length": 8, "unit": "mm", "required": true, "default": [100, 140, 180, 220, 260, 300, 340, 380]},
+        {"key": "R_n_zheng", "label": "正向电桥读数 R_n(正)", "type": "array", "length": 8, "unit": "Ω", "required": true, "default": [0.00558, 0.00775, 0.01, 0.01224, 0.01446, 0.0167, 0.01891, 0.02127]},
+        {"key": "R_n_fan", "label": "反向电桥读数 R_n(反)", "type": "array", "length": 8, "unit": "Ω", "required": true, "default": [0.00565, 0.00787, 0.0115, 0.01236, 0.01466, 0.01686, 0.01916, 0.02139]}
+      ]
+    }
+  ]
+}

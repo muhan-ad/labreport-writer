@@ -1,0 +1,18 @@
+{
+  "实验": "牛顿环（平凸透镜曲率半径）",
+  "groups": [
+    {
+      "name": "暗环序号（预填）",
+      "fields": [
+        {"key": "rings", "label": "暗环序号", "type": "array", "length": 10, "unit": "", "required": true, "default": [20, 19, 18, 17, 16, 15, 14, 13, 12, 11]}
+      ]
+    },
+    {
+      "name": "显微镜直径测量读数（10 环）",
+      "fields": [
+        {"key": "d_left", "label": "暗环左端读数 D左", "type": "array", "length": 10, "unit": "mm", "required": true},
+        {"key": "d_right", "label": "暗环右端读数 D右", "type": "array", "length": 10, "unit": "mm", "required": true}
+      ]
+    }
+  ]
+}

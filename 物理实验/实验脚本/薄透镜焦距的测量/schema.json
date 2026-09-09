@@ -1,0 +1,25 @@
+{
+  "实验": "薄透镜焦距的测量",
+  "groups": [
+    {
+      "name": "自准法（8 次焦距）",
+      "fields": [
+        {"key": "f_auto", "label": "自准法焦距 f", "type": "array", "length": 8, "unit": "cm", "required": true}
+      ]
+    },
+    {
+      "name": "物距像距法",
+      "fields": [
+        {"key": "u", "label": "物距 u", "type": "number", "unit": "cm", "required": true},
+        {"key": "v", "label": "像距 v（8 次）", "type": "array", "length": 8, "unit": "cm", "required": true}
+      ]
+    },
+    {
+      "name": "共轭法",
+      "fields": [
+        {"key": "x0", "label": "物屏位置 X₀", "type": "number", "unit": "cm", "required": true},
+        {"key": "conjugate", "label": "共轭法数据（3 次 × [X₃, X₁, X₂]）", "type": "matrix", "rows": 3, "cols": 3, "rowLabels": ["第1次", "第2次", "第3次"], "colLabels": ["X₃/cm", "X₁/cm", "X₂/cm"], "unit": "cm", "required": true}
+      ]
+    }
+  ]
+}

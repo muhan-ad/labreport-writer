@@ -1,0 +1,20 @@
+{
+  "实验": "光栅光谱的测量（但是它也用了分光计）",
+  "groups": [
+    {
+      "name": "衍射角读数（表 3-13-1，5 条谱线 × 8 列）",
+      "fields": [
+        {"key": "angles", "label": "θ 读数（度、分交替：θA⁻¹、θB⁻¹、θA⁺¹、θB⁺¹）", "type": "matrix", "rows": 5, "cols": 8, "unit": "度、分", "required": true,
+         "rowLabels": ["黄2光", "黄1光", "绿光1次", "绿光2次", "绿光3次"],
+         "colLabels": ["θA⁻¹度", "θA⁻¹分", "θB⁻¹度", "θB⁻¹分", "θA⁺¹度", "θA⁺¹分", "θB⁺¹度", "θB⁺¹分"]}
+      ]
+    },
+    {
+      "name": "给定与观察参数",
+      "fields": [
+        {"key": "lambda_green", "label": "汞灯绿线波长 λ绿", "type": "number", "unit": "nm", "default": 546.1, "required": true},
+        {"key": "kmax_obs", "label": "观察到最高衍射级数 Kmax", "type": "number", "required": true}
+      ]
+    }
+  ]
+}

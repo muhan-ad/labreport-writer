@@ -1,0 +1,34 @@
+{
+  "实验": "用冲击法测量螺旋管磁场分布实验",
+  "groups": [
+    {
+      "name": "已知参数（可按实际修改）",
+      "fields": [
+        {"key": "M_mH", "label": "互感系数 M", "type": "number", "unit": "mH", "default": 7.48, "required": true},
+        {"key": "N", "label": "螺线管总匝数 N", "type": "number", "default": 4565, "required": true},
+        {"key": "l_m", "label": "螺线管长度 l", "type": "number", "unit": "m", "default": 0.302, "required": true},
+        {"key": "r0_m", "label": "螺线管半径 r₀", "type": "number", "unit": "m", "default": 0.014, "required": true},
+        {"key": "n_coil", "label": "探测线圈匝数 n", "type": "number", "default": 2775, "required": true},
+        {"key": "S_m2", "label": "探测线圈截面积 S", "type": "number", "unit": "m²", "default": 9.5e-5, "required": true},
+        {"key": "I_A", "label": "工作电流 I", "type": "number", "unit": "A", "default": 0.1, "required": true},
+        {"key": "R_ohm", "label": "回路总电阻 R", "type": "number", "unit": "Ω", "default": 1000, "required": true}
+      ]
+    },
+    {
+      "name": "表1 RKb 标定（冲击常数，3 组）",
+      "fields": [
+        {"key": "I0_ma", "label": "互感器初级电流 I₀", "type": "array", "length": 3, "unit": "mA", "required": true},
+        {"key": "dm1_cm", "label": "第一次偏转 dm₁", "type": "array", "length": 3, "unit": "cm", "required": true},
+        {"key": "dm2_cm", "label": "第二次偏转 dm₂", "type": "array", "length": 3, "unit": "cm", "required": true}
+      ]
+    },
+    {
+      "name": "表2 磁感应强度 B 测量（16 个测点）",
+      "fields": [
+        {"key": "x_mm", "label": "测点位置 x", "type": "array", "length": 16, "unit": "mm", "required": true, "default": [0, 20, 40, 60, 80, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]},
+        {"key": "d_left_cm", "label": "左侧偏转 d左", "type": "array", "length": 16, "unit": "cm", "required": true},
+        {"key": "d_right_cm", "label": "右侧偏转 d右", "type": "array", "length": 16, "unit": "cm", "required": true}
+      ]
+    }
+  ]
+}

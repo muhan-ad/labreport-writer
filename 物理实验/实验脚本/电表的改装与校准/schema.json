@@ -1,0 +1,25 @@
+{
+  "实验": "电表的改装与校准",
+  "groups": [
+    {
+      "name": "表头内阻测量（3 次）",
+      "fields": [
+        {"key": "rg", "label": "表头内阻 R_g", "type": "array", "length": 3, "unit": "Ω", "required": true, "default": [3399.0, 3400.0, 3450.0]}
+      ]
+    },
+    {
+      "name": "电流表校正（改装为 1 mA 量程，10 点）",
+      "fields": [
+        {"key": "i_x", "label": "改装表读数 I_x", "type": "array", "length": 10, "unit": "mA", "required": true, "default": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
+        {"key": "i_s", "label": "标准表读数 I_s", "type": "array", "length": 10, "unit": "mA", "required": true, "default": [0.1, 0.21, 0.305, 0.4, 0.51, 0.61, 0.7, 0.83, 0.92, 1.0]}
+      ]
+    },
+    {
+      "name": "电压表校正（改装为 10 V 量程，10 点）",
+      "fields": [
+        {"key": "u_x", "label": "改装表读数 U_x", "type": "array", "length": 10, "unit": "V", "required": true, "default": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
+        {"key": "u_s", "label": "标准表读数 U_s", "type": "array", "length": 10, "unit": "V", "required": true, "default": [0.105, 0.2, 0.31, 0.4, 0.51, 0.605, 0.71, 0.805, 0.9, 1.0]}
+      ]
+    }
+  ]
+}

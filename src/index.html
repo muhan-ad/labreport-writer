@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>实验报告编写</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- 左侧边栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">物</div>
+        <div class="brand-text">
+          <div class="brand-title">实验报告</div>
+          <div class="brand-sub">大学物理 · 自动编写</div>
+        </div>
+      </div>
+
+      <!-- 分类导航 -->
+      <nav class="category-nav" id="categoryNav">
+        <button class="cat-item active" data-cat="all">
+          <span class="cat-dot"></span>
+          <span class="cat-name">全部实验</span>
+          <span class="cat-count" id="count-all">0</span>
+        </button>
+        <button class="cat-item" data-cat="mechanics">
+          <span class="cat-dot dot-mechanics"></span>
+          <span class="cat-name">力学</span>
+          <span class="cat-count" id="count-mechanics">0</span>
+        </button>
+        <button class="cat-item" data-cat="optics">
+          <span class="cat-dot dot-optics"></span>
+          <span class="cat-name">光学</span>
+          <span class="cat-count" id="count-optics">0</span>
+        </button>
+        <button class="cat-item" data-cat="electromagnetism">
+          <span class="cat-dot dot-em"></span>
+          <span class="cat-name">电磁学</span>
+          <span class="cat-count" id="count-em">0</span>
+        </button>
+        <button class="cat-item" data-cat="other">
+          <span class="cat-dot dot-other"></span>
+          <span class="cat-name">其他</span>
+          <span class="cat-count" id="count-other">0</span>
+        </button>
+      </nav>
+
+      <!-- 实验列表 -->
+      <div class="exp-list-wrap">
+        <div class="list-header">
+          <span id="listTitle">全部实验</span>
+          <div class="list-header-right">
+            <span class="list-count" id="listCount">0</span>
+            <button class="select-all-btn" id="btnSelectAll" title="全选/取消全选">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 11l3 3L22 4"/></svg>
+            </button>
+          </div>
+        </div>
+        <ul class="exp-list" id="expList"></ul>
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="sidebar-footer">
+        <button class="footer-btn" id="btnStudentInfo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          学生信息
+        </button>
+        <button class="footer-btn" id="btnSettings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </button>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main">
+
+      <!-- 自定义标题栏 -->
+      <header class="titlebar">
+        <div class="titlebar-drag">
+          <div class="titlebar-logo">物</div>
+          <span class="titlebar-name">实验报告编写</span>
+        </div>
+        <div class="titlebar-actions">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="searchInput" placeholder="搜索实验..." />
+          </div>
+          <button class="btn btn-ghost btn-sm" id="btnBatch" disabled>批量生成</button>
+          <div class="window-controls">
+            <button class="win-btn" id="btnMinimize" title="最小化">
+              <svg viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="5.5" width="8" height="1"/></svg>
+            </button>
+            <button class="win-btn" id="btnMaximize" title="最大化">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1"><rect x="2.5" y="2.5" width="7" height="7"/></svg>
+            </button>
+            <button class="win-btn win-close" id="btnClose" title="关闭">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- 内容区 -->
+      <div class="content" id="content">
+
+        <!-- 空状态 -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-illust">
+            <svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="1.2">
+              <rect x="20" y="15" width="80" height="90" rx="4"/>
+              <line x1="35" y1="35" x2="85" y2="35"/>
+              <line x1="35" y1="50" x2="70" y2="50"/>
+              <line x1="35" y1="65" x2="75" y2="65"/>
+              <line x1="35" y1="80" x2="60" y2="80"/>
+              <circle cx="85" cy="85" r="12" fill="currentColor" opacity="0.1"/>
+              <path d="M80 85l3.5 3.5 7-7" stroke="currentColor" stroke-width="1.8" fill="none"/>
+            </svg>
+          </div>
+          <h3>从左侧选择一个实验</h3>
+          <p>打开数据模板填写测量数据，然后一键生成 Word 报告</p>
+          <div class="empty-stats">
+            <div class="stat-item"><span class="stat-num" id="statTotal">0</span><span class="stat-label">个实验</span></div>
+            <div class="stat-item"><span class="stat-num" id="statDone">0</span><span class="stat-label">已生成</span></div>
+          </div>
+        </div>
+
+        <!-- 生成队列面板 -->
+        <div class="batch-panel" id="batchPanel" style="display:none;">
+          <div class="batch-header">
+            <h3>生成队列</h3>
+            <button class="link-btn" id="btnBatchClose">关闭</button>
+          </div>
+          <div class="queue-controls">
+            <span class="queue-state-badge" id="queueStateBadge">空闲</span>
+            <div class="queue-btns">
+              <button class="btn btn-sm" id="btnQueuePause">暂停队列</button>
+              <button class="btn btn-sm btn-primary" id="btnQueueResume" style="display:none;">继续</button>
+              <button class="btn btn-sm btn-danger" id="btnQueueCancelAll">全部取消</button>
+              <button class="btn btn-sm btn-outline" id="btnQueueClear">清除已结束</button>
+            </div>
+          </div>
+          <div class="batch-progress">
+            <div class="progress-bar"><div class="progress-fill" id="batchProgressFill"></div></div>
+            <div class="progress-text" id="batchProgressText">0 / 0</div>
+          </div>
+          <div class="queue-list" id="queueList"></div>
+          <details class="queue-log-details">
+            <summary>生成日志</summary>
+            <pre class="log-box batch-log" id="batchLog">等待生成...</pre>
+          </details>
+        </div>
+
+        <!-- 实验详情 -->
+        <div class="detail" id="detailPanel" style="display:none;">
+
+          <!-- 实验信息卡 -->
+          <div class="exp-header-card">
+            <div class="exp-header-main">
+              <h2 class="exp-name" id="expName"></h2>
+              <div class="exp-meta">
+                <span class="meta-tag" id="expCat"></span>
+                <span class="meta-dot" id="metaData"></span>
+                <span class="meta-dot" id="metaReport"></span>
+              </div>
+            </div>
+            <div class="exp-header-actions">
+              <button class="btn btn-outline" id="btnOpenData">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                打开数据模板
+              </button>
+              <button class="btn btn-primary" id="btnGenerate">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                生成报告
+              </button>
+              <button class="btn btn-danger" id="btnCancelGenerate" style="display:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                取消生成
+              </button>
+              <button class="btn btn-outline" id="btnOpenReport" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                打开报告
+              </button>
+            </div>
+          </div>
+
+          <!-- Tab 导航 -->
+          <div class="tab-nav" id="tabNav">
+            <button class="tab-item active" data-tab="data">数据录入</button>
+            <button class="tab-item" data-tab="generate">生成报告</button>
+            <button class="tab-item" data-tab="preview">报告预览</button>
+            <button class="tab-item" data-tab="ai">AI 润色</button>
+            <button class="tab-item" data-tab="history">历史记录</button>
+          </div>
+
+          <!-- Tab 内容 -->
+          <div class="tab-content">
+
+            <!-- 数据录入 -->
+            <div class="tab-pane active" id="tab-data">
+              <div class="card">
+                <div class="card-header">
+                  <h4>测量数据</h4>
+                  <div class="card-header-actions">
+                    <button class="btn btn-sm btn-outline" id="btnReloadData">重新加载</button>
+                    <button class="btn btn-sm btn-primary" id="btnSaveData" disabled>保存修改</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="data-file-info">
+                    <div class="file-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div class="file-meta">
+                      <div class="file-name" id="dataFileName">数据.xlsx</div>
+                      <div class="file-path" id="dataFilePath"></div>
+                    </div>
+                    <button class="btn btn-sm btn-outline" id="btnOpenData2">外部打开</button>
+                  </div>
+
+                  <!-- Sheet 切换 -->
+                  <div class="sheet-tabs" id="sheetTabs" style="display:none;"></div>
+
+                  <!-- 数据异常提示条 -->
+                  <div class="data-issue-bar" id="dataIssueBar" style="display:none;"></div>
+
+                  <!-- 可编辑表格 -->
+                  <div class="data-table-wrap" id="dataTableWrap">
+                    <div class="data-table-empty">选择实验后加载数据</div>
+                  </div>
+
+                  <div class="data-notice">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span>直接在表格中编辑测量数据，点击"保存修改"后再生成报告。目前表格数据仅为测试使用，请勿直接使用。</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h4>学生信息</h4>
+                  <button class="link-btn" id="btnEditStudent">编辑</button>
+                </div>
+                <div class="card-body">
+                  <div class="student-grid" id="studentGrid">
+                    <div class="student-item"><span class="student-label">姓名</span><span class="student-value" id="stuName">未设置</span></div>
+                    <div class="student-item"><span class="student-label">学号</span><span class="student-value" id="stuId">未设置</span></div>
+                    <div class="student-item"><span class="student-label">班级</span><span class="student-value" id="stuClass">未设置</span></div>
+                    <div class="student-item"><span class="student-label">日期</span><span class="student-value" id="stuDate">—</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 生成报告 -->
+            <div class="tab-pane" id="tab-generate">
+              <div class="card" id="variantsCard" style="display:none;">
+                <div class="card-header">
+                  <h4>变体组合</h4>
+                  <div class="card-header-actions">
+                    <button class="btn btn-sm btn-outline" id="btnRandomVariants">随机组合</button>
+                    <button class="btn btn-sm btn-outline" id="btnRefreshVariants">刷新</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div id="variantsList"></div>
+                  <div class="variants-tip">每个章节选择一个变体组合成报告；选择"随机"则由应用随机挑选。可用"AI 调整"生成新的变体描述。</div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <h4>生成日志</h4>
+                  <button class="link-btn" id="btnClearLog">清空</button>
+                </div>
+                <div class="card-body">
+                  <pre class="log-box" id="logContent">等待生成...</pre>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h4>生成结果</h4></div>
+                <div class="card-body">
+                  <div class="result-empty" id="resultEmpty">尚未生成报告</div>
+                  <div class="result-empty" id="resultGenerating" style="display:none;">报告生成中...</div>
+                  <div class="result-success" id="resultSuccess" style="display:none;">
+                    <div class="result-icon">✓</div>
+                    <div class="result-text">
+                      <div class="result-title">报告生成成功</div>
+                      <div class="result-path" id="resultPath"></div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" id="btnOpenReport2">打开报告</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 报告预览 -->
+            <div class="tab-pane" id="tab-preview">
+              <div class="card">
+                <div class="card-header">
+                  <h4>报告预览</h4>
+                  <div class="card-header-actions">
+                    <button class="btn btn-sm btn-outline" id="btnRefreshPreview">刷新预览</button>
+                    <button class="btn btn-sm btn-outline" id="btnOpenReportPreview">外部打开</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="preview-wrap" id="previewWrap">
+                    <div class="preview-empty">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      <p>生成报告后可在此预览</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI 润色 -->
+            <div class="tab-pane" id="tab-ai">
+              <div class="card">
+                <div class="card-header">
+                  <h4>AI 个性化润色</h4>
+                  <span class="card-hint" id="aiStatus">未配置 API Key</span>
+                </div>
+                <div class="card-body">
+                  <div class="ai-options">
+                    <div class="ai-option-group">
+                      <label>写作风格</label>
+                      <div class="ai-radio-group" id="aiStyleGroup">
+                        <label class="ai-radio"><input type="radio" name="aiStyle" value="rigorous" checked /> 严谨学术</label>
+                        <label class="ai-radio"><input type="radio" name="aiStyle" value="concise" /> 简洁明了</label>
+                        <label class="ai-radio"><input type="radio" name="aiStyle" value="detailed" /> 详细充实</label>
+                      </div>
+                    </div>
+                    <div class="ai-option-group">
+                      <label>润色范围</label>
+                      <div class="ai-radio-group" id="aiScopeGroup">
+                        <label class="ai-radio"><input type="radio" name="aiScope" value="analysis" checked /> 结果分析</label>
+                        <label class="ai-radio"><input type="radio" name="aiScope" value="principle" /> 实验原理</label>
+                        <label class="ai-radio"><input type="radio" name="aiScope" value="full" /> 全文润色</label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ai-actions">
+                    <button class="btn btn-primary" id="btnAiPolish" disabled>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                      开始润色
+                    </button>
+                    <button class="btn btn-outline" id="btnAiConfig">配置 API Key</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" id="aiResultCard" style="display:none;">
+                <div class="card-header">
+                  <h4>润色结果</h4>
+                  <div class="card-header-actions">
+                    <button class="btn btn-sm btn-outline" id="btnCopyAi">复制结果</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="ai-compare">
+                    <div class="ai-compare-col">
+                      <div class="ai-compare-label">原文</div>
+                      <div class="ai-compare-text" id="aiOriginalText"></div>
+                    </div>
+                    <div class="ai-compare-col">
+                      <div class="ai-compare-label">润色后</div>
+                      <div class="ai-compare-text ai-polished" id="aiPolishedText"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" id="aiLoadingCard" style="display:none;">
+                <div class="card-body">
+                  <div class="ai-loading">
+                    <div class="ai-spinner"></div>
+                    <span>AI 正在润色中...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 历史记录（预留） -->
+            <div class="tab-pane" id="tab-history">
+              <div class="card">
+                <div class="card-header"><h4>生成历史</h4></div>
+                <div class="card-body">
+                  <div class="history-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <p>暂无生成记录</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 学生信息弹窗 -->
+  <div class="modal-overlay" id="studentModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>学生信息</h3>
+        <button class="modal-close" id="btnCloseStudent">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>姓名</label>
+          <input type="text" id="inputName" placeholder="请输入姓名" />
+        </div>
+        <div class="form-group">
+          <label>学号</label>
+          <input type="text" id="inputId" placeholder="请输入学号" />
+        </div>
+        <div class="form-group">
+          <label>班级</label>
+          <input type="text" id="inputClass" placeholder="请输入班级" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnCancelStudent">取消</button>
+        <button class="btn btn-primary" id="btnSaveStudent">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3>设置</h3>
+        <button class="modal-close" id="btnCloseSettings">×</button>
+      </div>
+      <div class="modal-body settings-center">
+        <!-- 设置模块导航 -->
+        <div class="settings-nav">
+          <button class="settings-nav-item active" id="btnNavAi">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a4 4 0 0 1 4 4c0 1.1-.45 2.1-1.17 2.83A4 4 0 0 1 12 11a4 4 0 1 1 0-9z"/><path d="M4 21v-1a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v1"/></svg>
+            AI 服务
+          </button>
+        </div>
+        <!-- 模块内容 -->
+        <div class="settings-panes">
+          <!-- AI 服务页 -->
+          <div class="settings-pane active" id="paneAi">
+            <div class="settings-section">
+              <h4>AI 服务</h4>
+              <div class="form-group">
+                <label>API 提供商</label>
+                <select id="selectProvider">
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="doubao">豆包</option>
+                  <option value="qwen">通义千问</option>
+                  <option value="custom">自定义（OpenAI 兼容）</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="inputApiKey" placeholder="sk-..." />
+              </div>
+              <div class="form-group">
+                <label>模型名称（留空使用默认）</label>
+                <input type="text" id="inputModel" placeholder="如 deepseek-v4-pro / doubao-seed-2-1-pro-260628 / qwen-plus" />
+                <div class="model-quick-select" id="modelQuickSelect"></div>
+              </div>
+              <div class="form-group">
+                <label>API 地址（切换提供商自动填充，可修改）</label>
+                <input type="text" id="inputApiUrl" placeholder="https://api.example.com/v1" />
+              </div>
+            </div>
+            <div class="settings-section">
+              <h4>生成选项</h4>
+              <div class="form-row">
+                <label class="checkbox-label"><input type="checkbox" id="chkAiPolish" /> 生成后自动 AI 润色</label>
+                <label class="checkbox-label"><input type="checkbox" id="chkAutoOpen" checked /> 生成后自动打开报告</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnCancelSettings">取消</button>
+        <button class="btn btn-primary" id="btnSaveSettings">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 变体 AI 调整弹窗 -->
+  <div class="modal-overlay" id="variantAIModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="variantAITitle">AI 调整变体</h3>
+        <button class="modal-close" id="btnCloseVariantAI">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>调整指令（可选）</label>
+          <input type="text" id="variantAIInstruction" placeholder="例如：更正式的学术风格 / 更简洁 / 换个思路表述" />
+        </div>
+        <div class="form-row">
+          <label>原变体文本</label>
+          <textarea id="variantAIOriginal" rows="4" readonly></textarea>
+        </div>
+        <div class="form-row">
+          <label>AI 生成结果（可直接编辑后保存）</label>
+          <textarea id="variantAIResult" rows="6"></textarea>
+        </div>
+        <div class="form-hint">提示：AI 会保留 $...$ 公式与 %%DATA:xxx%% 数据占位符，只改写文字描述。</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnCancelVariantAI">取消</button>
+        <button class="btn btn-outline" id="btnVariantAIRetry">生成/重试</button>
+        <button class="btn btn-primary" id="btnSaveVariantAI">保存为新变体</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 变体预览弹窗 -->
+  <div class="modal-overlay" id="variantPreviewModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="variantPreviewTitle">变体预览</h3>
+        <button class="modal-close" id="btnCloseVariantPreview">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="variant-preview-text" id="variantPreviewText"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 通知容器 -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="docx-preview.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
