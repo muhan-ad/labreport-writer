@@ -1455,7 +1455,9 @@ let updateDownloading = false;
 
 function loadUpdatePane() {
   const st = loadSettings();
-  $('inputManifestUrl').value = st.manifestUrl || '';
+  // 内置默认更新清单地址（腾讯云 COS 默认域名，永久有效；换桶时可在下方修改）
+  $('inputManifestUrl').value = st.manifestUrl
+    || 'https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/latest.json';
   window.labAPI.getAppVersion().then(v => {
     $('inputCurrentVersion').value = 'v' + v;
   }).catch(() => { $('inputCurrentVersion').value = '未知'; });
