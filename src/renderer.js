@@ -1449,51 +1449,37 @@ function switchSettingsPane(name) {
   $('paneUpdate').classList.toggle('active', name === 'update');
 }
 
-// ── 检查更新（Gitee Release，国内高速）──
+// ── 检查更新（对象存储清单，国内高速）──
+const MANIFEST_URL = 'https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/latest.json';
 let updateInfo = null;   // 最近一次检查结果（含 assets）
 let updateDownloading = false;
 
 function loadUpdatePane() {
-  const st = loadSettings();
-  // 内置默认更新清单地址（腾讯云 COS 默认域名，永久有效；换桶时可在下方修改）
-  $('inputManifestUrl').value = st.manifestUrl
-    || 'https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/latest.json';
   window.labAPI.getAppVersion().then(v => {
-    $('inputCurrentVersion').value = 'v' + v;
-  }).catch(() => { $('inputCurrentVersion').value = '未知'; });
-}
-
-function saveUpdateSource() {
-  const st = loadSettings();
-  st.manifestUrl = $('inputManifestUrl').value.trim();
-  saveSettings(st);
+    $('inputCurrentVersion').textContent = 'v' + v;
+  }).catch(() => { $('inputCurrentVersion').textContent = '未知'; });
 }
 
 async function checkForUpdate() {
-  saveUpdateSource();
   const btn = $('btnCheckUpdate');
   btn.disabled = true;
   btn.textContent = '检查中…';
-  $('updateResult').textContent = '正在连接更新服务器…';
   try {
-    const r = await window.labAPI.checkForUpdate({
-      manifestUrl: $('inputManifestUrl').value.trim(),
-    });
+    const r = await window.labAPI.checkForUpdate({ manifestUrl: MANIFEST_URL });
     if (!r.ok) {
-      $('updateResult').textContent = '检查失败：' + r.error;
+      showToast('error', '检查更新失败', r.error, 5000);
       return;
     }
     updateInfo = r;
     if (r.hasUpdate) {
-      $('updateResult').textContent = `发现新版本 v${r.latest}，正在自动下载…`;
       openUpdateModal(r);
       // 发现新版本后自动开始下载
       setTimeout(() => downloadUpdate(), 400);
     } else {
-      $('updateResult').textContent = `已是最新版本 v${r.current}`;
+      showToast('success', '检查更新', `目前已是最新版本 v${r.current}`, 4000);
     }
   } catch (err) {
-    $('updateResult').textContent = '检查失败：' + err.message;
+    showToast('error', '检查更新失败', err.message, 5000);
   } finally {
     btn.disabled = false;
     btn.textContent = '检查更新';
