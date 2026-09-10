@@ -564,71 +564,40 @@ function httpsGetJson(url, timeout = 15000) {
 // ── IPC: 当前应用版本 ──
 ipcMain.handle('get-app-version', () => app.getVersion());
 
-// 检查更新：优先使用自定义清单地址（latest.json），否则查询 Gitee 最新 Release
+// 检查更新：读取自定义更新清单 latest.json（{ version, notes, url, fileName }）
 ipcMain.handle('check-for-update', async (_, cfg) => {
   try {
     const manifestUrl = String((cfg && cfg.manifestUrl) || '').trim();
     const current = app.getVersion();
-
-    // 自定义清单：{ version, notes, url, fileName }
-    if (manifestUrl) {
-      const u = assertPublicUrl(manifestUrl);
-      if (!(await checkPublicDns(u.hostname))) {
-        throw new Error('更新地址无法解析或指向本地地址');
-      }
-      const mf = await httpsGetJson(u.href);
-      const latest = String(mf.version || '').replace(/^v/i, '');
-      const hasUpdate = !!(latest && compareVersions(latest, current) > 0);
-      const dlUrl = String(mf.url || '').trim();
-      let safeDlUrl = '';
-      if (dlUrl) {
-        const du = assertPublicUrl(dlUrl);
-        if (!(await checkPublicDns(du.hostname))) {
-          throw new Error('安装包下载地址无法解析或指向本地地址');
-        }
-        safeDlUrl = du.href;
-      }
-      return {
-        ok: true,
-        hasUpdate,
-        current,
-        latest,
-        notes: String(mf.notes || '').trim(),
-        assets: safeDlUrl
-          ? [{ name: String(mf.fileName || 'update.exe'), url: safeDlUrl, size: 0 }]
-          : [],
-        releaseUrl: '',
-      };
+    if (!manifestUrl) {
+      return { ok: false, error: '请先在设置中填写自定义更新清单地址' };
     }
-
-    // Gitee Release 路径
-    const owner = String((cfg && cfg.owner) || '').trim().replace(/[^\w-]/g, '');
-    const repo = String((cfg && cfg.repo) || '').trim().replace(/[^\w-]/g, '');
-    if (!owner || !repo) {
-      return { ok: false, error: '请先在设置中填写 Gitee 用户名与仓库名，或填写自定义更新清单地址' };
+    const u = assertPublicUrl(manifestUrl);
+    if (!(await checkPublicDns(u.hostname))) {
+      throw new Error('更新地址无法解析或指向本地地址');
     }
-    const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/latest`;
-    if (!url.startsWith('https://gitee.com/')) {
-      return { ok: false, error: '更新源必须为 Gitee 地址' };
-    }
-    const rel = await httpsGetJson(url);
-    const latest = String(rel.tag_name || '').replace(/^v/i, '');
+    const mf = await httpsGetJson(u.href);
+    const latest = String(mf.version || '').replace(/^v/i, '');
     const hasUpdate = !!(latest && compareVersions(latest, current) > 0);
-    const assets = [];
-    for (const a of (rel.assets || [])) {
-      if (!/\.(exe|msi|zip)$/i.test(String(a.name || ''))) continue;
-      const du = assertPublicUrl(a.browser_download_url);
-      if (!(await checkPublicDns(du.hostname))) continue;
-      assets.push({ name: a.name, url: du.href, size: a.size || 0 });
+    const dlUrl = String(mf.url || '').trim();
+    let safeDlUrl = '';
+    if (dlUrl) {
+      const du = assertPublicUrl(dlUrl);
+      if (!(await checkPublicDns(du.hostname))) {
+        throw new Error('安装包下载地址无法解析或指向本地地址');
+      }
+      safeDlUrl = du.href;
     }
     return {
       ok: true,
       hasUpdate,
       current,
       latest,
-      notes: String(rel.body || '').trim(),
-      assets,
-      releaseUrl: rel.html_url || '',
+      notes: String(mf.notes || '').trim(),
+      assets: safeDlUrl
+        ? [{ name: String(mf.fileName || 'update.exe'), url: safeDlUrl, size: 0 }]
+        : [],
+      releaseUrl: '',
     };
   } catch (err) {
     return { ok: false, error: err.message, hasUpdate: false };

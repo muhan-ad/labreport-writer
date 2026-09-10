@@ -1,6 +1,6 @@
 {
   "name": "labreport-writer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "大学物理实验报告自动编写应用",
   "main": "main.js",
   "scripts": {
@@ -58,7 +58,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "src/icon.ico"

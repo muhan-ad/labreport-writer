@@ -1455,11 +1455,7 @@ let updateDownloading = false;
 
 function loadUpdatePane() {
   const st = loadSettings();
-  // 默认更新源：Gitee（国内高速），与 GitHub 仓库同名；用户在 Gitee 建好同名仓库并
-  // 发布 Release 后即可直接检查更新；也可改用下方自定义清单地址（对象存储直链）
   $('inputManifestUrl').value = st.manifestUrl || '';
-  $('inputGiteeOwner').value = st.giteeOwner || 'muhan-ad';
-  $('inputGiteeRepo').value = st.giteeRepo || 'labreport-writer';
   window.labAPI.getAppVersion().then(v => {
     $('inputCurrentVersion').value = 'v' + v;
   }).catch(() => { $('inputCurrentVersion').value = '未知'; });
@@ -1468,8 +1464,6 @@ function loadUpdatePane() {
 function saveUpdateSource() {
   const st = loadSettings();
   st.manifestUrl = $('inputManifestUrl').value.trim();
-  st.giteeOwner = $('inputGiteeOwner').value.trim();
-  st.giteeRepo = $('inputGiteeRepo').value.trim();
   saveSettings(st);
 }
 
@@ -1482,8 +1476,6 @@ async function checkForUpdate() {
   try {
     const r = await window.labAPI.checkForUpdate({
       manifestUrl: $('inputManifestUrl').value.trim(),
-      owner: $('inputGiteeOwner').value.trim(),
-      repo: $('inputGiteeRepo').value.trim(),
     });
     if (!r.ok) {
       $('updateResult').textContent = '检查失败：' + r.error;
