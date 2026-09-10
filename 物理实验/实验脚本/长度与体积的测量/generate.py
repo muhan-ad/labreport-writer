@@ -223,16 +223,17 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("板长 L = ")
     doc.add_inline_math(f"{r['L']} mm")
     doc.add_run("，u(L) = ")
-    doc.add_inline_math(f"{format_number(r['uL'], 4)} mm")
+    doc.add_inline_math(f"{format_number(r['uL'], sig_figs=4)} mm")
     doc.add_run("；板宽 W = ")
     doc.add_inline_math(f"{r['W']} mm")
     doc.add_run("，u(W) = ")
-    doc.add_inline_math(f"{format_number(r['uW'], 4)} mm")
+    doc.add_inline_math(f"{format_number(r['uW'], sig_figs=4)} mm")
 
     doc.add_heading("3. 孔径测量（游标卡尺，50 分度）", level=2)
     doc.add_paragraph("")
-    doc.add_table(["次数", *[str(i + 1) for i in range(r["n"])]],
-                  [[f"{x:.2f}"] for x in r["D"]], col_widths=[1.5] + [1.4] * r["n"])
+    doc.add_table(["测量量", *[str(i + 1) for i in range(r["n"])]],
+                  [["D / mm", *[f"{x:.2f}" for x in r["D"]]]],
+                  col_widths=[1.5] + [1.4] * r["n"])
     doc.add_paragraph("")
     doc.add_run("平均值：")
     doc.add_inline_math(f"D_a = {r['D_a']:.3f} mm")
@@ -242,13 +243,14 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("合成不确定度：")
     doc.add_math(
         r"u(D) = \sqrt{u_A(D)^2 + \left(\frac{\Delta D}{\sqrt{3}}\right)^2} = "
-        + format_number(r["uD"], 5) + r" \text{ mm}"
+        + format_number(r["uD"], sig_figs=5) + r" \text{ mm}"
     )
 
     doc.add_heading("4. 板厚测量（螺旋测微计）", level=2)
     doc.add_paragraph("")
-    doc.add_table(["次数", *[str(i + 1) for i in range(r["n"])]],
-                  [[f"{x:.3f}"] for x in r["d_shi"]], col_widths=[1.5] + [1.4] * r["n"])
+    doc.add_table(["测量量", *[str(i + 1) for i in range(r["n"])]],
+                  [["d / mm", *[f"{x:.3f}" for x in r["d_shi"]]]],
+                  col_widths=[1.5] + [1.4] * r["n"])
     doc.add_paragraph("")
     doc.add_run("平均值：")
     doc.add_inline_math(f"d_a = {r['d_a']:.4f} mm")
@@ -258,7 +260,7 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("合成不确定度（一级千分尺示值误差 Δd = 0.004 mm）：")
     doc.add_math(
         r"u(d) = \sqrt{u_A(d)^2 + \left(\frac{\Delta d}{\sqrt{3}}\right)^2} = "
-        + format_number(r["ud"], 5) + r" \text{ mm}"
+        + format_number(r["ud"], sig_figs=5) + r" \text{ mm}"
     )
 
     doc.add_heading("5. 缝长与缝宽测量（15J 测量显微镜）", level=2)
@@ -285,10 +287,10 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("每个缝值由两个读数之差得到，B 类不确定度按两个分度值合成：")
     doc.add_math(
         r"u_B = \frac{\sqrt{2}\,\Delta x}{\sqrt{3}}, \quad "
-        r"u(Lx) = \sqrt{u_A(Lx)^2 + u_B^2} = " + format_number(r["uLx"], 5) + r" \text{ mm}"
+        r"u(Lx) = \sqrt{u_A(Lx)^2 + u_B^2} = " + format_number(r["uLx"], sig_figs=5) + r" \text{ mm}"
     )
     doc.add_run("，u(Ly) = ")
-    doc.add_inline_math(format_number(r["uLy"], 5) + r" \text{ mm}")
+    doc.add_inline_math(format_number(r["uLy"], sig_figs=5) + r" \text{ mm}")
 
     doc.add_heading("6. 体积计算与不确定度", level=2)
     doc.add_paragraph("")
@@ -317,12 +319,15 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("金属体体积的绝对不确定度：")
     doc.add_math(
         r"u(V) = \sqrt{u(V_p)^2 + u(V_h)^2 + u(V_s)^2} = "
-        + format_number(r["uV"], 2) + r" \text{ mm}^3"
+        + format_number(r["uV"], r["uV"]) + r" \text{ mm}^3"
     )
     doc.add_paragraph("")
     doc.add_run("最终结果：")
+    v_power = math.floor(math.log10(r["V"]))
     doc.add_math(
-        r"V = (" + format_number(r["V"], 2) + r" \pm " + format_number(r["uV"], 2) + r") \text{ mm}^3"
+        r"V = (" + format_number(r["V"] / 10 ** v_power, r["uV"] / 10 ** v_power)
+        + r" \pm " + format_number(r["uV"] / 10 ** v_power, r["uV"] / 10 ** v_power)
+        + r") \times 10^{" + f"{v_power}" + r"} \text{ mm}^3"
     )
 
     doc.add_heading("三、实验结果分析", level=1)
@@ -330,9 +335,9 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("本实验综合使用米尺、游标卡尺、螺旋测微计和 15J 测量显微镜四种长度测量仪器，"
                 "分别适用于不同精度等级的测量对象：板长与板宽用米尺单次测量，孔径用 50 分度游标卡尺，"
                 "板厚用千分尺，缝长与缝宽用测量显微镜。测得金属体体积 V = ")
-    doc.add_inline_math(f"{format_number(r['V'], 2)} mm³")
+    doc.add_inline_math(f"{format_number(r['V'], sig_figs=2)} mm³")
     doc.add_run("，相对不确定度约 ")
-    doc.add_inline_math(f"{format_number(r['uV'] / r['V'] * 100, 2)}%")
+    doc.add_inline_math(f"{format_percent(r['uV'] / r['V'] * 100)}%")
     doc.add_run("，精度主要受缝宽（最小尺寸）与孔径测量限制。")
 
     doc.add_paragraph("")

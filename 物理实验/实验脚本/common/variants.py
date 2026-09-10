@@ -67,10 +67,10 @@ def get_polish_overrides():
         return None
 
 
-_HEADING_RE = re.compile(r"(?m)^[ \t]*#{1,6}[ \t]*")
+_HEADING_RE = re.compile(r"(?m)^[ \t]*#{1,6}[ \t]*[^\n]*\n?")
 _BULLET_RE = re.compile(r"(?m)^[ \t]*[-*+][ \t]+")
 _HR_RE = re.compile(r"(?m)^[ \t]*[-=*_]{3,}[ \t]*$")
-_TABLE_SEP_CELL = re.compile(r":?-{2,}:?")
+_TABLE_SEP_CELL = re.compile(r":?-+:?")
 
 SECTIONS_MARKER = ".LAB_SECTIONS_JSON:"
 
@@ -143,6 +143,10 @@ def normalize_polish_md(text):
             ln = "；".join(c for c in cells if c)
         lines.append(ln)
     text = "\n".join(lines)
+    # 0. LaTeX 间距命令字面（\emsp \ensp \quad \qquad \hspace{...} \, \; \: \! \ ）
+    #    统一替换为空格：Word UnicodeMath 不识别这些命令，防止进入公式/正文后
+    #    以原文残留（后续公式预处理与保存兜底仍会再清一遍）
+    text = re.sub(r"\\(?:emsp|ensp|qquad|quad|hspace\*?\{[^}]*\}|,|;|:|!| )", " ", text)
     text = text.replace(r"\[", "$$").replace(r"\]", "$$")
     text = text.replace(r"\(", "$").replace(r"\)", "$")
     text = _HEADING_RE.sub("", text)

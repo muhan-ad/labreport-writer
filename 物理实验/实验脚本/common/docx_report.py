@@ -13,6 +13,7 @@
 import os
 import re
 import time
+import zipfile
 import ctypes
 import subprocess
 import win32com.client
@@ -32,6 +33,107 @@ wdDoNotSaveChanges = 0
 wdCollapseEnd = 0
 wdAlignRowCenter = 1
 
+# ── 宋体缺失的 Unicode 上下标字符 → Word 原生上下标 ──
+# 宋体（SimSun）不含 U+2070-207F（²³除外）/U+2080-209F 等字符，直接输出会
+# 渲染为 □（豆腐块）。打字时把这些字符转为普通字符 + Font.Subscript/
+# Superscript 原生样式：显示效果更好，且不依赖字体覆盖。
+_SUBSCRIPT_MAP = {
+    '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+    '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+    'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h', 'ₖ': 'k',
+    'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p', 'ₛ': 's', 'ₜ': 't',
+    'ᵢ': 'i', 'ⱼ': 'j',
+}
+_SUPERSCRIPT_MAP = {
+    '⁻': '-', '⁺': '+', '⁰': '0', '¹': '1', '⁴': '4', '⁵': '5',
+    '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n', 'ⁱ': 'i',
+}
+# 宋体缺失且无上下标语义的字符 → 宋体已有的等效写法（防 □ 兜底）
+_CHAR_REPLACE = [
+    ('≪', '<<'), ('≫', '>>'),      # 远小于/远大于 → ASCII
+    ('\u2212', '-'),                 # 数学减号 U+2212 → ASCII 连字符
+    ('\u2207', '\u25bd'),            # ∇ → ▽（GB2312 符号区，宋体具备）
+    ('\u0304', '\u00af'),            # 组合上横线 → 间距宏符 ¯（兜底；源头应使用 $\bar{x}$）
+]
+
+
+def _normalize_text_chars(text: str) -> str:
+    for a, b in _CHAR_REPLACE:
+        if a in text:
+            text = text.replace(a, b)
+    return text
+
+
+# LaTeX 间距命令字面（Word UnicodeMath 不识别，纯文本中若出现会原样显示）：
+# \emsp \ensp \qquad \quad \hspace{...} \, \; \: \  → 全角空格；\! 负空格删除
+_LATEX_SPACE_CMD_RE = re.compile(
+    r"\\(?:emsp|ensp|qquad|quad|hspace\*?\{[^}]*\}|,|;|:| )")
+
+
+def _normalize_text(text: str) -> str:
+    r"""文本归一化：字符映射 + 清除 LaTeX 间距命令字面（防 \emsp 等原文残留）。"""
+    text = _normalize_text_chars(text)
+    text = text.replace(r"\!", "")
+    return _LATEX_SPACE_CMD_RE.sub("\u3000", text)
+
+
+def _purge_latex_spaces_in_docx(path: str) -> int:
+    r"""兜底：保存完成后扫描报告的 document.xml，清除残留的 LaTeX 间距命令
+    字面文本（\emsp、\ensp、\quad、\qquad、\hspace{...}、\,、\;、\:、\!、\ 等），
+    统一替换为全角空格。返回清除次数；文件异常时静默返回 0。"""
+    if not os.path.exists(path):
+        return 0
+    try:
+        with zipfile.ZipFile(path, "r") as zin:
+            items = {n: zin.read(n) for n in zin.namelist()}
+    except Exception:
+        return 0
+    target = "word/document.xml"
+    if target not in items:
+        return 0
+    try:
+        xml = items[target].decode("utf-8")
+    except Exception:
+        return 0
+    new_xml, n = _LATEX_SPACE_CMD_RE.subn("\u3000", xml)
+    if n == 0:
+        return 0
+    tmp = path + ".~sweep"
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for name, data in items.items():
+                zout.writestr(name, new_xml if name == target else data)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+        return 0
+    print(f"[提示] 已清除 {n} 处未识别的 LaTeX 间距命令（\\emsp 等）")
+    return n
+
+
+def _needs_safe_typing(text: str) -> bool:
+    return any(ch in _SUBSCRIPT_MAP or ch in _SUPERSCRIPT_MAP for ch in text) \
+        or any(a in text for a, _ in _CHAR_REPLACE)
+
+
+_GREEK_MAP = {
+    'Alpha': 'Α', 'Beta': 'Β', 'Gamma': 'Γ', 'Delta': 'Δ', 'Epsilon': 'Ε',
+    'Zeta': 'Ζ', 'Eta': 'Η', 'Theta': 'Θ', 'Iota': 'Ι', 'Kappa': 'Κ',
+    'Lambda': 'Λ', 'Mu': 'Μ', 'Nu': 'Ν', 'Xi': 'Ξ', 'Pi': 'Π', 'Rho': 'Ρ',
+    'Sigma': 'Σ', 'Tau': 'Τ', 'Phi': 'Φ', 'Chi': 'Χ', 'Psi': 'Ψ', 'Omega': 'Ω',
+    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε',
+    'varepsilon': 'ε', 'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'vartheta': 'ϑ',
+    'iota': 'ι', 'kappa': 'κ', 'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ',
+    'pi': 'π', 'varpi': 'ϖ', 'rho': 'ρ', 'varrho': 'ϱ', 'sigma': 'σ',
+    'varsigma': 'ς', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ', 'varphi': 'φ',
+    'chi': 'χ', 'psi': 'ψ', 'omega': 'ω',
+}
+_GREEK_RE = re.compile(r"\\(" + "|".join(sorted(_GREEK_MAP, key=len, reverse=True)) + r")(?![A-Za-z])")
+
 
 def _text_mode_replace(m: re.Match) -> str:
     """\\mathrm/\\text 回调：内容用双引号包裹，并替换 Unicode 上标。"""
@@ -41,6 +143,11 @@ def _text_mode_replace(m: re.Match) -> str:
                        ('^8', '⁸'), ('^9', '⁹'), ('^0', '⁰'),
                        ('^+', '⁺'), ('^-', '⁻')]:
         content = content.replace(carat, uni)
+    # 文本模式内的 LaTeX 命令同样要转为字符，否则引号内会原样显示
+    content = _GREEK_RE.sub(lambda mm: _GREEK_MAP[mm.group(1)], content)
+    for latex, uni in ((r'\cdot', '·'), (r'\times', '×'), (r'\pm', '±'),
+                       (r'\approx', '≈'), (r'\%', '%'), (r'\,', ' ')):
+        content = content.replace(latex, uni)
     return '"' + content + '"'
 
 
@@ -123,6 +230,11 @@ class DocxReportWriter:
 
     def __init__(self, output_path: str, visible: bool = False):
         self.output_path = os.path.abspath(output_path)
+        # 先写入同目录临时文件、Word 退出后再原子替换到目标路径：
+        # 直接 SaveAs 目标文件时，若该报告正被用户的 Word 打开，会产生文件冲突，
+        # 隐藏的自动化实例会弹出对话框并把窗口抢到前台（批量生成时打断用户查看）。
+        # 临时名以 ".~saving<pid>.docx" 结尾，排序在正式报告之后，且被应用扫描过滤。
+        self._tmp_path = self.output_path + ".~saving" + str(os.getpid()) + ".docx"
         self._closed = False
 
         # 记录启动 Word 前的已有 WINWORD 进程（close 时只清理本次新增的实例）
@@ -163,7 +275,7 @@ class DocxReportWriter:
         self._goto_end()
         self._sel.TypeParagraph()
         if text:
-            self._sel.TypeText(text)
+            self._type_text_safe(text)
         # 选中刚输入的段落
         self._sel.Paragraphs.Last.Range.Select()
         pf = self._sel.ParagraphFormat
@@ -185,6 +297,40 @@ class DocxReportWriter:
         self._sel.Font.Size = font_size
         self._sel.Font.Bold = bold
 
+    def _type_text_safe(self, text: str):
+        """打字输出文本：宋体缺失的 Unicode 上下标自动转为 Word 原生上下标。
+
+        普通文本直接 TypeText；遇到 ₀₁₂/⁻⁵ 等字符时切换
+        Font.Subscript/Superscript 打出等效的普通字符，避免渲染为 □。
+        """
+        if not text:
+            return
+        text = _normalize_text(text)
+        if not _needs_safe_typing(text):
+            self._sel.TypeText(text)
+            return
+        segments = []  # [mode, str]  mode: 0 普通 / 1 下标 / 2 上标
+        for ch in text:
+            if ch in _SUBSCRIPT_MAP:
+                mode, c = 1, _SUBSCRIPT_MAP[ch]
+            elif ch in _SUPERSCRIPT_MAP:
+                mode, c = 2, _SUPERSCRIPT_MAP[ch]
+            else:
+                mode, c = 0, ch
+            if segments and segments[-1][0] == mode:
+                segments[-1][1] += c
+            else:
+                segments.append([mode, c])
+        for mode, s in segments:
+            if mode == 1:
+                self._sel.Font.Subscript = True
+            elif mode == 2:
+                self._sel.Font.Superscript = True
+            self._sel.TypeText(s)
+            if mode:
+                self._sel.Font.Subscript = False
+                self._sel.Font.Superscript = False
+
     # ── 公开方法 ──────────────────────────────────────────
 
     def add_title(self, text: str):
@@ -193,11 +339,11 @@ class DocxReportWriter:
                              alignment=wdAlignParagraphCenter, space_after=12)
 
     def add_student_info(self):
-        """插入学生信息行。从环境变量读取真实值，未设置时用占位符。"""
-        name = os.environ.get("LAB_STUDENT_NAME", "").strip() or "■■■"
-        sid = os.environ.get("LAB_STUDENT_ID", "").strip() or "■■■■■■"
-        sclass = os.environ.get("LAB_STUDENT_CLASS", "").strip() or "■■■"
-        date = os.environ.get("LAB_STUDENT_DATE", "").strip() or "■■■■■■"
+        """插入学生信息行。从环境变量读取真实值，未设置时用（未填写）占位。"""
+        name = os.environ.get("LAB_STUDENT_NAME", "").strip() or "（未填写）"
+        sid = os.environ.get("LAB_STUDENT_ID", "").strip() or "（未填写）"
+        sclass = os.environ.get("LAB_STUDENT_CLASS", "").strip() or "（未填写）"
+        date = os.environ.get("LAB_STUDENT_DATE", "").strip() or "（未填写）"
         fields = f"姓名：{name}    学号：{sid}    班级：{sclass}    实验日期：{date}"
         self._type_paragraph(fields, font_name="宋体", font_size=self._body_font_size,
                              space_after=6)
@@ -300,7 +446,7 @@ class DocxReportWriter:
         self._goto_end()
         self._sel.Font.Name = "宋体"
         self._sel.Font.Size = self._body_font_size
-        self._sel.TypeText(text)
+        self._type_text_safe(text)
 
     def add_inline_math(self, latex: str):
         """在当前段落内插入内联公式（不换行，随文字流动）。
@@ -351,7 +497,27 @@ class DocxReportWriter:
         formula = re.sub(r'\\text\{([^}]*)\}', _text_mode_replace, formula)
         # 3. \\% → %（Word UnicodeMath 百分号不需要转义）
         formula = formula.replace(r'\%', '%')
-        # 4. \\overline{...} — BuildUp 原生支持，保留不动
+        # 4. LaTeX 间距命令（\, \; \: \! \emsp \ensp \quad \qquad \hspace{...}
+        #    及反斜杠空格）UnicodeMath 不识别，会导致 BuildUp 失败、
+        #    公式以线性文本残留，统一替换为普通空格
+        for sp in (r'\,', r'\;', r'\:', r'\ ', r'\emsp', r'\ensp', r'\qquad', r'\quad'):
+            formula = formula.replace(sp, ' ')
+        formula = formula.replace(r'\!', '')
+        formula = re.sub(r'\\hspace\*?\{[^}]*\}', ' ', formula)
+        # 5. 希腊字母命令 → Unicode 希腊字符（\Omega 等部分名称 Word UnicodeMath
+        #    不识别，会导致整条公式 BuildUp 失败并残留为线性文本）
+        formula = _GREEK_RE.sub(lambda m: _GREEK_MAP[m.group(1)], formula)
+        # 6. \\dfrac / \\tfrac / \\cfrac → \\frac（UnicodeMath 只认 \\frac）
+        formula = re.sub(r"\\(?:d|t|c)frac(?![A-Za-z])", r"\\frac", formula)
+        # 7. 括号尺寸命令 \\Big \\big \\Bigg 等 → 去掉（UnicodeMath 不识别，
+        #    残留会导致整条公式 BuildUp 失败）
+        formula = re.sub(r"\\(?:Big|big|Bigg|bigg)[lrm]?(?![A-Za-z])", "", formula)
+        # 8. 绝对值竖线：裸 |...| 在含 \frac / 下标 / 上标时 Word BuildUp 会失败
+        #    （\frac 以 ⍁ U+2341、\left/\right 以 ├ ┤ 字面残留，渲染为方框），
+        #    统一改为 \\left|...\\right|（原生支持、必能构建）；简单 |x| 不动
+        formula = re.sub(r"(?<!\\left)\|([^|]*(?:\\frac|[_^])[^|]*)\|",
+                         r"\\left|\1\\right|", formula)
+        # 9. \\overline{...} — BuildUp 原生支持，保留不动
         return formula
 
     def _set_cell_content(self, cell, text, bold=False):
@@ -386,7 +552,17 @@ class DocxReportWriter:
                     self._sel.Font.Name = "宋体"
                     self._sel.Font.Size = 10
                     self._sel.Font.Bold = bold
-                    self._sel.TypeText(part)
+                    self._type_text_safe(part)
+            cell.Range.ParagraphFormat.Alignment = wdAlignParagraphCenter
+        elif _needs_safe_typing(text):
+            # 含宋体缺失字符：改用打字路径以套用原生上下标
+            cell.Range.Text = ""
+            cell.Range.Select()
+            self._sel.Collapse(Direction=1)  # wdCollapseStart=1
+            self._sel.Font.Name = "宋体"
+            self._sel.Font.Size = 10
+            self._sel.Font.Bold = bold
+            self._type_text_safe(text)
             cell.Range.ParagraphFormat.Alignment = wdAlignParagraphCenter
         else:
             cell.Range.Text = text
@@ -458,20 +634,27 @@ class DocxReportWriter:
         self._goto_end()
         self._sel.InsertBreak(Type=wdPageBreak)
 
+    def _save_tmp(self):
+        """保存到临时文件（保存前再次确认实例不可见，防止任何弹窗抢焦点）。"""
+        try:
+            self._word.Visible = False
+        except Exception:
+            pass
+        self._doc.SaveAs(self._tmp_path, FileFormat=wdFormatXMLDocument)
+
     def save(self):
-        """保存文档。"""
+        """保存文档（写入临时文件，close() 时原子替换到目标路径）。"""
         if self._closed:
             return
-        self._doc.SaveAs(self.output_path, FileFormat=wdFormatXMLDocument)
-        print(f"Report saved: {self.output_path}")
+        self._save_tmp()
 
     def close(self):
-        """保存并退出 Word（含孤儿进程兜底清理）。"""
+        """保存并退出 Word（含孤儿进程兜底清理），随后把临时文件替换为目标报告。"""
         if self._closed:
             return
 
         try:
-            self._doc.SaveAs(self.output_path, FileFormat=wdFormatXMLDocument)
+            self._save_tmp()
         except Exception:
             pass
         try:
@@ -488,6 +671,19 @@ class DocxReportWriter:
         self._doc = None
         self._word = None
         self._closed = True
+
+        # Word 完全退出后再替换目标文件：即使目标被用户 Word 打开也只是替换失败，
+        # 不会让自动化实例弹窗抢前台；本次结果保留在临时文件中供恢复。
+        try:
+            os.replace(self._tmp_path, self.output_path)
+            _purge_latex_spaces_in_docx(self.output_path)
+            print(f"Report saved: {self.output_path}")
+        except PermissionError:
+            print(f"[错误] 目标报告文件正被占用（可能已在 Word 中打开）：{self.output_path}")
+            print(f"[提示] 本次生成结果已保留为：{self._tmp_path}")
+            print("[提示] 请关闭 Word 中的旧报告后重新生成，或将上述文件重命名使用")
+        except FileNotFoundError:
+            pass  # 保存阶段失败时无临时文件可替换
 
         # 兜底：Quit 之后重新枚举"本次新增"的 WINWORD 进程（Quit 前快照可能
         # 错过尚未登记完成的实例；Quit 后即使 tasklist 短暂失败也能重试到）

@@ -1,0 +1,104 @@
+{
+ "实验": "拉伸法测量钢丝杨氏弹性模量",
+ "groups": [
+  {
+   "name": "实验参数",
+   "fields": [
+    {
+     "key": "L",
+     "label": "钢丝长度 L",
+     "type": "number",
+     "unit": "m",
+     "default": 0.973,
+     "required": true
+    },
+    {
+     "key": "D",
+     "label": "光杠杆常数 D",
+     "type": "number",
+     "unit": "mm",
+     "default": 45,
+     "required": true
+    },
+    {
+     "key": "H",
+     "label": "镜面到标尺距离 H",
+     "type": "number",
+     "unit": "m",
+     "default": 0.939,
+     "required": true
+    },
+    {
+     "key": "d_0",
+     "label": "螺旋测微计零点修正 d₀",
+     "type": "number",
+     "unit": "mm",
+     "default": -0.015,
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "钢丝直径（螺旋测微计，6 次）",
+   "fields": [
+    {
+     "key": "d_shi",
+     "label": "钢丝直径 d",
+     "type": "array",
+     "length": 6,
+     "unit": "mm",
+     "required": true,
+     "default": [
+      0.626,
+      0.625,
+      0.628,
+      0.622,
+      0.625,
+      0.623
+     ]
+    }
+   ]
+  },
+  {
+   "name": "光杠杆标尺读数（8 次）",
+   "fields": [
+    {
+     "key": "ni_zheng",
+     "label": "增重 n_i",
+     "type": "array",
+     "length": 8,
+     "unit": "cm",
+     "required": true,
+     "default": [
+      2.06,
+      2.7,
+      3.32,
+      3.91,
+      4.38,
+      4.95,
+      5.56,
+      6.15
+     ]
+    },
+    {
+     "key": "ni_jian",
+     "label": "减重 n_i",
+     "type": "array",
+     "length": 8,
+     "unit": "cm",
+     "required": true,
+     "default": [
+      1.96,
+      2.58,
+      3.2,
+      3.78,
+      4.44,
+      5.01,
+      5.62,
+      6.23
+     ]
+    }
+   ]
+  }
+ ]
+}

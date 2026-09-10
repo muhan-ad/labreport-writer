@@ -15,32 +15,34 @@ let isDataModified = false;
 const $ = (id) => document.getElementById(id);
 
 // ── 实验标准名称映射（文件夹名 → 教材标准名称）──
+// 目录已按知识库（lab_部分1.pdf）目录名统一，此处保留映射以备将来目录名调整时兜底
 const STANDARD_NAMES = {
   '长度与体积的测量': '长度与体积的测量',
-  '扭摆法测量切变模量': '扭摆法测量钢丝切变模量',
-  '重力加速度的测量（复摆）': '重力加速度的测量',
-  '三线摆（刚体转动惯量）': '刚体转动惯量的测量',
+  '扭摆法测量钢丝切变模量': '扭摆法测量钢丝切变模量',
+  '重力加速度的测量': '重力加速度的测量',
+  '刚体转动惯量的测量': '刚体转动惯量的测量',
   '简谐振动的合成': '简谐振动的合成',
-  '空气中声速': '声速的测量',
+  '声速的测量（水中）': '声速的测量（水中）',
+  '声速的测量（空气）': '声速的测量（空气）',
   '薄透镜焦距的测量': '薄透镜焦距的测量',
-  '单缝衍射（衍射光强分布）': '衍射光强分布的测量',
-  '分光计测量三棱镜顶角': '三棱镜顶角的测量',
-  '牛顿环（平凸透镜曲率半径）': '平凸透镜曲率半径的测量',
-  '偏振光鉴别与马吕斯定律验证实验': '光的偏振特性测量',
-  '迈克尔逊（激光波长测量）': '激光波长的测量',
-  '光栅光谱的测量（但是它也用了分光计）': '光栅光谱的测量',
+  '衍射光强分布的测量': '衍射光强分布的测量',
+  '三棱镜顶角的测量': '三棱镜顶角的测量',
+  '平凸透镜曲率半径的测量': '平凸透镜曲率半径的测量',
+  '光的偏振特性测量': '光的偏振特性测量',
+  '激光波长的测量': '激光波长的测量',
+  '光栅光谱的测量': '光栅光谱的测量',
   '电表的改装与校准': '电表的改装与校准',
-  '电子元件伏安特性测量': '电子元件伏安特性的测量',
-  '电子束的电磁偏转': '电子偏转特性的测量',
-  '灵敏电流计特性测量': '灵敏电流计特性的测量',
+  '电子元件伏安特性的测量': '电子元件伏安特性的测量',
+  '电子偏转特性的测量': '电子偏转特性的测量',
+  '灵敏电流计特性的测量': '灵敏电流计特性的测量',
   '静电场的模拟': '静电场的模拟',
-  '霍尔效应测量磁场': '霍尔效应实验',
-  '用冲击法测量螺旋管磁场分布实验': '直螺线管磁场分布的测量',
+  '霍尔效应实验': '霍尔效应实验',
+  '直螺线管磁场分布的测量': '直螺线管磁场分布的测量',
   '低电阻的测量': '低电阻的测量',
-  '拉伸法测量杨氏弹性模量': '拉伸法测量钢丝杨氏弹性模量',
+  '拉伸法测量钢丝杨氏弹性模量': '拉伸法测量钢丝杨氏弹性模量',
   '电容与高电阻的测量': '电容与高电阻的测量',
   '劈尖干涉': '劈尖干涉',
-  '理想气体状态方程实验': '理想气体状态方程',
+  '理想气体状态方程': '理想气体状态方程',
 };
 
 function getDisplayName(exp) {
@@ -465,6 +467,7 @@ async function loadExperimentData(exp) {
     currentData = null;
     $('dataTableWrap').innerHTML = '<div class="data-table-empty">该实验尚未迁移，暂不能在应用内填写</div>';
     $('sheetTabs').style.display = 'none';
+    $('btnClearFormData').disabled = true;
   }
 }
 
@@ -474,11 +477,35 @@ async function loadFormData(exp) {
   currentData = (result.ok && result.data) ? result.data : {};
   isDataModified = false;
   $('btnSaveData').disabled = true;
+  $('btnClearFormData').disabled = false;
   notifyDataModified();
   $('sheetTabs').style.display = 'none';   // 表单模式无 sheet 切换
   $('dataIssueBar').style.display = 'none';
   renderForm();
   refreshFormCheck();
+}
+
+// 清除表单全部可输入数据（置空，便于从头填写；需点"保存修改"才写入 data.json）
+function clearFormData() {
+  if (!currentSchema || !currentExp) return;
+  if (!confirm('清除当前实验表单中已填写的全部数据？\n所有字段将置为空值，清除后需点击「保存修改」才会写入数据文件。')) return;
+  for (const group of (currentSchema.groups || [])) {
+    for (const fld of (group.fields || [])) {
+      if (fld.type === 'array') {
+        currentData[fld.key] = new Array(fld.length || 0).fill(null);
+      } else if (fld.type === 'matrix') {
+        currentData[fld.key] = Array.from({ length: fld.rows || 0 }, () => new Array(fld.cols || 0).fill(null));
+      } else {
+        currentData[fld.key] = null;
+      }
+    }
+  }
+  renderForm();
+  isDataModified = true;
+  notifyDataModified();
+  $('btnSaveData').disabled = false;
+  refreshFormCheck();
+  showToast('info', '已清除', '全部字段已置空，填写后请点击「保存修改」');
 }
 
 function renderForm() {
@@ -704,8 +731,7 @@ function getAiStylePrompt(style) {
 
 // ── AI 润色：章节源文缓存 / 技能 / 导入覆盖 ──
 let currentSections = null;      // .lab_sections.json 内容 {章节: 原文(含 $ 公式)}
-let lastPolishSection = null;    // 本次润色的可导入章节名（null = 仅复制范围）
-let lastPolishedText = '';
+let lastPolishResults = [];      // 本轮润色结果 [{section, displayScope, original, polished} | {error}]
 
 function loadAllOverrides() { try { return JSON.parse(localStorage.getItem('polishOverrides') || '{}'); } catch { return {}; } }
 function saveAllOverrides(all) { localStorage.setItem('polishOverrides', JSON.stringify(all)); }
@@ -738,16 +764,30 @@ async function refreshAiScopeOptions(keepValue) {
       if (r && r.ok && r.sections) currentSections = r.sections;
     }
   } catch (e) { /* 无缓存按仅复制处理 */ }
-  const sel = $('aiScopeSel');
-  const prev = keepValue ? sel.value : '';
-  sel.innerHTML = '';
-  const mk = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
+  const box = $('aiScopeGroup');
+  if (!box) return;
+  const prev = keepValue ? new Set([...box.querySelectorAll('input:checked')].map(i => i.value)) : new Set();
+  box.innerHTML = '';
+  const add = (v, t) => {
+    const label = document.createElement('label');
+    label.className = 'ai-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = v;
+    if (prev.has(v)) cb.checked = true;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(t));
+    box.appendChild(label);
+  };
   if (currentSections) {
-    for (const sec of Object.keys(currentSections)) mk('sec:' + sec, `${sec}（可导入）`);
+    for (const sec of Object.keys(currentSections)) add('sec:' + sec, sec + '（可导入）');
   }
-  mk('analysis', '结果分析（取自报告 · 仅复制）');
-  mk('full', '全文（仅复制）');
-  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  add('analysis', '结果分析（取自报告 · 仅复制）');
+  add('full', '全文（仅复制）');
+  if (!prev.size) {
+    const first = box.querySelector('input');
+    if (first) first.checked = true;
+  }
 }
 
 // ── AI 润色技能（文件制：userData/skills，由外部 Skill 文件导入）──
@@ -768,14 +808,30 @@ function getEnabledSkills() {
   return skillsCache.filter(sk => st[sk.id] !== false);
 }
 function renderSkillOptions(keepValue) {
-  const sel = $('aiSkillSel');
-  if (!sel) return;
-  const prev = keepValue ? sel.value : '';
-  sel.innerHTML = '';
-  const mk = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
-  mk('', '默认技能（写作风格 + 知识库约束）');
-  getEnabledSkills().forEach(sk => mk(sk.id, sk.name));
-  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  const box = $('aiSkillGroup');
+  if (!box) return;
+  const prev = keepValue ? new Set([...box.querySelectorAll('input:checked')].map(i => i.value)) : new Set();
+  box.innerHTML = '';
+  const skills = getEnabledSkills();
+  if (!skills.length) {
+    const span = document.createElement('span');
+    span.className = 'ai-check-empty';
+    span.textContent = '暂无已启用的技能（可在「设置 → AI 润色技能」导入）';
+    box.appendChild(span);
+    return;
+  }
+  for (const sk of skills) {
+    const label = document.createElement('label');
+    label.className = 'ai-check';
+    label.title = sk.description || sk.name;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = sk.id;
+    if (prev.has(sk.id)) cb.checked = true;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(sk.name));
+    box.appendChild(label);
+  }
 }
 
 async function loadSkillList() {
@@ -867,92 +923,179 @@ async function runAiPolish() {
   }
 
   const style = document.querySelector('input[name="aiStyle"]:checked')?.value || 'rigorous';
-  const scopeVal = $('aiScopeSel').value || 'analysis';
-  const skillId = $('aiSkillSel').value;
-  const skill = skillId ? skillsCache.find(s => s.id === skillId) : null;
+  const scopeVals = [...document.querySelectorAll('#aiScopeGroup input[type="checkbox"]:checked')].map(i => i.value);
+  if (!scopeVals.length) {
+    showToast('warning', '未选择润色对象', '请至少勾选一个章节或范围');
+    return;
+  }
+  const skillIds = [...document.querySelectorAll('#aiSkillGroup input[type="checkbox"]:checked')].map(i => i.value);
   const kbOnly = $('chkKbOnly').checked;
+
+  // 知识库与技能指令：本轮所有润色对象共用
+  let ragText = '';
+  if (kbOnly) {
+    try {
+      const rr = await window.labAPI.readRag(currentExp.path);
+      if (rr && rr.ok && rr.text) ragText = rr.text;
+    } catch (e) { /* 读取失败时降级为软约束 */ }
+  }
+  const kbBlock = kbOnly
+    ? `\n\n【知识库硬性约束——本实验教材原理是唯一权威依据】\n${ragText ? ragText.slice(0, 8000) : '（本实验未提供知识库文本）'}\n只能使用知识库与原文中有依据的表述：不得新增两者中不存在的公式、数据、常数或结论，不得凭常识臆造。${ragText ? '' : '当前无知识库：只做语言层面的改写，禁止补充任何物理内容。'}`
+    : '';
+  const skillBlock = skillIds
+    .map(id => skillsCache.find(s => s.id === id))
+    .filter(Boolean)
+    .map(s => `\n【技能·${s.name}（优先遵循）】${(s.content || '').slice(0, 2000)}`)
+    .join('');
+  const formatBlock = '\n\n【输出格式硬性要求】只输出改写后的正文（Markdown）：任何数学表达（含 \\pi、\\Delta 等符号和上下标）一律用 $...$ 包裹，独立公式用单行 $$...$$（定界符与公式同一行）；不得输出裸的 \\frac、^、_ 等未包裹的 LaTeX；不得改变任何数值、单位与变量符号；不要输出章节编号标题（如"一、"），不要输出任何解释。';
 
   // 显示加载状态
   $('aiResultCard').style.display = 'none';
   $('aiLoadingCard').style.display = 'block';
   $('btnAiPolish').disabled = true;
-  lastPolishSection = null;
 
+  // "结果分析/全文"取自 docx 纯文本，只提取一次
+  let fullText = '';
+  if (scopeVals.some(v => !v.startsWith('sec:'))) {
+    try { fullText = await getReportText(); } catch (e) { fullText = ''; }
+  }
+
+  const results = [];
   try {
-    // 取原文：可导入章节用报告源文（公式为 $ LaTeX），其余从 docx 提取纯文本
-    let sectionText = '';
-    let displayScope = '';
-    if (scopeVal.startsWith('sec:')) {
-      const sec = scopeVal.slice(4);
-      sectionText = (currentSections && currentSections[sec]) || '';
-      displayScope = sec;
-      if (!sectionText) {
-        showToast('warning', '缺少章节源文', '该章节暂无源文缓存，请先生成一次报告');
-        return;
-      }
-      lastPolishSection = sec;
-    } else {
-      const fullText = await getReportText();
-      if (!fullText) {
-        showToast('error', '读取报告失败', '无法读取报告内容');
-        return;
-      }
-      sectionText = extractSection(fullText, scopeVal);
-      displayScope = scopeVal === 'full' ? '全文' : '结果分析';
-    }
+    for (let i = 0; i < scopeVals.length; i++) {
+      const scopeVal = scopeVals[i];
+      $('aiLoadingText').textContent = `AI 正在润色中...（${i + 1}/${scopeVals.length}）`;
 
-    // 显示原文
-    $('aiOriginalText').textContent = sectionText.slice(0, 3000);
+      let sectionText = '', displayScope = '', section = null;
+      if (scopeVal.startsWith('sec:')) {
+        section = scopeVal.slice(4);
+        sectionText = (currentSections && currentSections[section]) || '';
+        displayScope = section;
+        if (!sectionText) {
+          results.push({ section, displayScope, error: '缺少章节源文，请先生成一次报告' });
+          continue;
+        }
+      } else {
+        displayScope = scopeVal === 'full' ? '全文' : '结果分析';
+        if (!fullText) {
+          results.push({ section: null, displayScope, error: '无法读取报告内容' });
+          continue;
+        }
+        sectionText = extractSection(fullText, scopeVal);
+      }
 
-    // 读取本实验教材知识库，作为润色的唯一权威依据
-    let ragText = '';
-    if (kbOnly) {
+      const messages = [
+        {
+          role: 'system',
+          content: `你是一个大学物理实验报告润色助手。${getAiStylePrompt(style)}${skillBlock}请对用户提供的实验报告内容进行个性化改写，保持科学准确性和数据真实性，避免与原文措辞重复，使报告更具个人特色，降低重复检测风险。只输出改写后的内容，不要输出解释或说明。${formatBlock}${kbBlock}`,
+        },
+        {
+          role: 'user',
+          content: `请润色以下实验报告的「${displayScope}」部分：\n\n${sectionText.slice(0, 6000)}`,
+        },
+      ];
+
       try {
-        const rr = await window.labAPI.readRag(currentExp.path);
-        if (rr && rr.ok && rr.text) ragText = rr.text;
-      } catch (e) { /* 读取失败时降级为软约束 */ }
+        const result = await window.labAPI.aiChat({
+          provider: settings.provider || 'deepseek',
+          apiKey: settings.apiKey,
+          apiUrl: settings.apiUrl,
+          model: settings.model,
+          messages,
+          temperature: 0.8,
+        });
+        if (result.ok) results.push({ section, displayScope, original: sectionText, polished: result.content || '' });
+        else results.push({ section, displayScope, error: result.error || '润色失败' });
+      } catch (err) {
+        results.push({ section, displayScope, error: err.message });
+      }
     }
-    const kbBlock = kbOnly
-      ? `\n\n【知识库硬性约束——本实验教材原理是唯一权威依据】\n${ragText ? ragText.slice(0, 8000) : '（本实验未提供知识库文本）'}\n只能使用知识库与原文中有依据的表述：不得新增两者中不存在的公式、数据、常数或结论，不得凭常识臆造。${ragText ? '' : '当前无知识库：只做语言层面的改写，禁止补充任何物理内容。'}`
-      : '';
 
-    const formatBlock = '\n\n【输出格式硬性要求】只输出改写后的正文（Markdown）：任何数学表达（含 \\pi、\\Delta 等符号和上下标）一律用 $...$ 包裹，独立公式用单行 $$...$$（定界符与公式同一行）；不得输出裸的 \\frac、^、_ 等未包裹的 LaTeX；不得改变任何数值、单位与变量符号；不要输出章节编号标题（如"一、"），不要输出任何解释。';
-
-    const messages = [
-      {
-        role: 'system',
-        content: `你是一个大学物理实验报告润色助手。${getAiStylePrompt(style)}${skill && skill.content ? `\n【当前技能指令（优先遵循）】${skill.content.slice(0, 4000)}` : ''}请对用户提供的实验报告内容进行个性化改写，保持科学准确性和数据真实性，避免与原文措辞重复，使报告更具个人特色，降低重复检测风险。只输出改写后的内容，不要输出解释或说明。${formatBlock}${kbBlock}`,
-      },
-      {
-        role: 'user',
-        content: `请润色以下实验报告的「${displayScope}」部分：\n\n${sectionText.slice(0, 6000)}`,
-      },
-    ];
-
-    const result = await window.labAPI.aiChat({
-      provider: settings.provider || 'deepseek',
-      apiKey: settings.apiKey,
-      apiUrl: settings.apiUrl,
-      model: settings.model,
-      messages,
-      temperature: 0.8,
-    });
-
-    if (result.ok) {
-      lastPolishedText = result.content || '';
-      $('aiPolishedText').textContent = lastPolishedText;
-      $('btnImportAi').style.display = lastPolishSection ? '' : 'none';
-      $('aiResultCard').style.display = 'block';
-      showToast('success', '润色完成', lastPolishSection ? `「${lastPolishSection}」已润色，可导入并重新生成报告` : 'AI 润色已完成，可复制结果');
+    lastPolishResults = results;
+    renderAiResults();
+    const okCount = results.filter(r => r.polished).length;
+    if (okCount) {
+      showToast('success', '润色完成', `${okCount}/${results.length} 个对象完成，可导入章节支持一键重新生成`);
     } else {
-      showToast('error', '润色失败', result.error, 5000);
+      showToast('error', '润色失败', (results[0] && results[0].error) || '全部失败', 5000);
     }
   } catch (err) {
     showToast('error', '润色异常', err.message, 5000);
   } finally {
     $('aiLoadingCard').style.display = 'none';
+    $('aiLoadingText').textContent = 'AI 正在润色中...';
     $('btnAiPolish').disabled = false;
   }
+}
+
+// 渲染多对象润色结果（每项：原文/润色后对比 + 复制 + 可导入章节的导入按钮）
+function renderAiResults() {
+  const wrap = $('aiResultsWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  let importable = 0;
+  for (const r of lastPolishResults) {
+    const block = document.createElement('div');
+    block.className = 'ai-result-block';
+
+    const head = document.createElement('div');
+    head.className = 'ai-result-head';
+    const title = document.createElement('span');
+    title.className = 'ai-result-title';
+    title.textContent = r.displayScope + (r.section ? '（可导入）' : '（仅复制）');
+    head.appendChild(title);
+
+    if (r.error) {
+      const err = document.createElement('span');
+      err.className = 'ai-result-error';
+      err.textContent = '失败：' + r.error;
+      head.appendChild(err);
+      block.appendChild(head);
+      wrap.appendChild(block);
+      continue;
+    }
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn btn-sm btn-outline';
+    copyBtn.textContent = '复制结果';
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(r.polished).then(() => {
+        showToast('success', '已复制', r.displayScope + ' 润色结果已复制到剪贴板');
+      }).catch(() => {
+        showToast('error', '复制失败', '请手动选择复制');
+      });
+    };
+    head.appendChild(copyBtn);
+
+    if (r.section) {
+      importable++;
+      const impBtn = document.createElement('button');
+      impBtn.type = 'button';
+      impBtn.className = 'btn btn-sm btn-primary';
+      impBtn.textContent = '导入此章节';
+      impBtn.onclick = () => {
+        if (!currentExp) return;
+        setPolishOverride(currentExp.id, r.section, r.polished);
+        updateOverrideBar();
+        showToast('info', '已导入', `「${r.section}」将在下次生成报告时生效`);
+      };
+      head.appendChild(impBtn);
+    }
+
+    block.appendChild(head);
+    const cmp = document.createElement('div');
+    cmp.className = 'ai-compare';
+    cmp.innerHTML = '<div class="ai-compare-col"><div class="ai-compare-label">原文</div><div class="ai-compare-text"></div></div>'
+      + '<div class="ai-compare-col"><div class="ai-compare-label">润色后</div><div class="ai-compare-text ai-polished"></div></div>';
+    const texts = cmp.querySelectorAll('.ai-compare-text');
+    texts[0].textContent = (r.original || '').slice(0, 3000);
+    texts[1].textContent = r.polished;
+    block.appendChild(cmp);
+    wrap.appendChild(block);
+  }
+  $('btnImportAi').style.display = importable ? '' : 'none';
+  $('aiResultCard').style.display = 'block';
 }
 
 function updateAiStatus() {
@@ -1157,6 +1300,23 @@ function bindEvents() {
   $('btnNavAi').onclick = () => switchSettingsPane('ai');
   $('btnNavReports').onclick = () => { switchSettingsPane('reports'); loadReportsList(); };
   $('btnRefreshReports').onclick = loadReportsList;
+  $('btnNavHelp').onclick = () => switchSettingsPane('help');
+  $('btnNavDanger').onclick = () => switchSettingsPane('danger');
+  $('btnNavUpdate').onclick = () => { switchSettingsPane('update'); loadUpdatePane(); };
+  $('btnCheckUpdate').onclick = checkForUpdate;
+  $('btnUpdateDownload').onclick = downloadUpdate;
+  $('btnUpdateLater').onclick = () => {
+    if (updateDownloading) window.labAPI.cancelUpdateDownload();
+    closeModal('updateModal');
+  };
+  $('btnCloseUpdateModal').onclick = () => {
+    if (updateDownloading) window.labAPI.cancelUpdateDownload();
+    closeModal('updateModal');
+  };
+  $('btnDangerGo').onclick = startDangerFlow;
+  $('btnDangerExit').onclick = exitDangerFlow;
+  $('btnDangerProceed').onclick = proceedDangerFlow;
+  $('btnDeleteAllReports').onclick = deleteAllReports;
   $('btnCloseSettings').onclick = () => closeModal('settingsModal');
   $('btnCancelSettings').onclick = () => closeModal('settingsModal');
   $('btnSaveSettings').onclick = saveAppSettings;
@@ -1214,6 +1374,7 @@ function bindEvents() {
   // 数据录入
   $('btnSaveData').onclick = saveExcelData;
   $('btnReloadData').onclick = reloadExcelData;
+  $('btnClearFormData').onclick = clearFormData;
 
   // 报告预览
   $('btnRefreshPreview').onclick = () => { previewLoaded = false; loadPreview(); };
@@ -1222,14 +1383,6 @@ function bindEvents() {
   // AI 润色
   $('btnAiPolish').onclick = runAiPolish;
   $('btnAiConfig').onclick = () => openModal('settingsModal');
-  $('btnCopyAi').onclick = () => {
-    const text = $('aiPolishedText').textContent;
-    navigator.clipboard.writeText(text).then(() => {
-      showToast('success', '已复制', '润色结果已复制到剪贴板');
-    }).catch(() => {
-      showToast('error', '复制失败', '请手动选择复制');
-    });
-  };
   $('btnImportAi').onclick = importPolishAndRegenerate;
   $('btnClearOverrides').onclick = () => {
     if (!currentExp) return;
@@ -1288,9 +1441,201 @@ function switchSettingsPane(name) {
   $('paneAi').classList.toggle('active', name === 'ai');
   $('btnNavReports').classList.toggle('active', name === 'reports');
   $('paneReports').classList.toggle('active', name === 'reports');
+  $('btnNavHelp').classList.toggle('active', name === 'help');
+  $('paneHelp').classList.toggle('active', name === 'help');
+  $('btnNavDanger').classList.toggle('active', name === 'danger');
+  $('paneDanger').classList.toggle('active', name === 'danger');
+  $('btnNavUpdate').classList.toggle('active', name === 'update');
+  $('paneUpdate').classList.toggle('active', name === 'update');
+}
+
+// ── 检查更新（Gitee Release，国内高速）──
+let updateInfo = null;   // 最近一次检查结果（含 assets）
+let updateDownloading = false;
+
+function loadUpdatePane() {
+  const st = loadSettings();
+  // 默认更新源：Gitee（国内高速），与 GitHub 仓库同名；用户在 Gitee 建好同名仓库并
+  // 发布 Release 后即可直接检查更新；也可改用下方自定义清单地址（对象存储直链）
+  $('inputManifestUrl').value = st.manifestUrl || '';
+  $('inputGiteeOwner').value = st.giteeOwner || 'muhan-ad';
+  $('inputGiteeRepo').value = st.giteeRepo || 'labreport-writer';
+  window.labAPI.getAppVersion().then(v => {
+    $('inputCurrentVersion').value = 'v' + v;
+  }).catch(() => { $('inputCurrentVersion').value = '未知'; });
+}
+
+function saveUpdateSource() {
+  const st = loadSettings();
+  st.manifestUrl = $('inputManifestUrl').value.trim();
+  st.giteeOwner = $('inputGiteeOwner').value.trim();
+  st.giteeRepo = $('inputGiteeRepo').value.trim();
+  saveSettings(st);
+}
+
+async function checkForUpdate() {
+  saveUpdateSource();
+  const btn = $('btnCheckUpdate');
+  btn.disabled = true;
+  btn.textContent = '检查中…';
+  $('updateResult').textContent = '正在连接更新服务器…';
+  try {
+    const r = await window.labAPI.checkForUpdate({
+      manifestUrl: $('inputManifestUrl').value.trim(),
+      owner: $('inputGiteeOwner').value.trim(),
+      repo: $('inputGiteeRepo').value.trim(),
+    });
+    if (!r.ok) {
+      $('updateResult').textContent = '检查失败：' + r.error;
+      return;
+    }
+    updateInfo = r;
+    if (r.hasUpdate) {
+      $('updateResult').textContent = `发现新版本 v${r.latest}，正在自动下载…`;
+      openUpdateModal(r);
+      // 发现新版本后自动开始下载
+      setTimeout(() => downloadUpdate(), 400);
+    } else {
+      $('updateResult').textContent = `已是最新版本 v${r.current}`;
+    }
+  } catch (err) {
+    $('updateResult').textContent = '检查失败：' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '检查更新';
+  }
+}
+
+function openUpdateModal(r) {
+  $('updateModalTitle').textContent = `发现新版本 v${r.latest}`;
+  $('updateMeta').textContent = `当前版本 v${r.current} → 最新版本 v${r.latest}`;
+  const notesEl = $('updateNotes');
+  notesEl.textContent = r.notes || '（本次更新未填写说明）';
+  // 优先 exe 安装包，其次 zip
+  const exe = r.assets.find(a => /\.exe$/i.test(a.name));
+  const asset = exe || r.assets[0] || null;
+  $('btnUpdateDownload').disabled = !asset;
+  if (!asset) {
+    $('btnUpdateDownload').textContent = '暂无安装包';
+  } else {
+    $('btnUpdateDownload').textContent = '立即下载' + (exe ? '' : '（压缩包）');
+  }
+  $('updateProgressWrap').style.display = 'none';
+  openModal('updateModal');
+}
+
+async function downloadUpdate() {
+  if (!updateInfo || !updateInfo.assets.length || updateDownloading) return;
+  const asset = updateInfo.assets.find(a => /\.exe$/i.test(a.name)) || updateInfo.assets[0];
+  updateDownloading = true;
+  $('btnUpdateDownload').disabled = true;
+  $('btnUpdateLater').disabled = true;
+  $('updateProgressWrap').style.display = 'block';
+  $('updateProgressFill').style.width = '0%';
+  $('updateProgressText').textContent = '正在连接下载服务器…';
+  window.labAPI.onUpdateProgress(({ percent }) => {
+    $('updateProgressFill').style.width = percent + '%';
+    $('updateProgressText').textContent = `下载中 ${percent}%`;
+  });
+  try {
+    const r = await window.labAPI.downloadUpdate({ url: asset.url, name: asset.name });
+    if (r.ok) {
+      $('updateProgressText').textContent = '下载完成';
+      showToast('success', '更新下载完成', '即将打开安装程序', 4000);
+      window.labAPI.openFile(r.filePath);
+      closeModal('updateModal');
+    } else {
+      $('updateProgressText').textContent = '下载失败：' + r.error;
+      showToast('error', '下载失败', r.error, 5000);
+    }
+  } catch (err) {
+    $('updateProgressText').textContent = '下载异常：' + err.message;
+  } finally {
+    updateDownloading = false;
+    $('btnUpdateDownload').disabled = false;
+    $('btnUpdateLater').disabled = false;
+  }
+}
+
+// ── 请勿点击：高危警告多级确认 + 彩蛋音频 ──
+let dangerStep = 0;          // 0 一级 / 1 二级 / 2 三级
+let dangerAudio = null;      // 当前 Audio 对象（防止 GC 中断播放）
+
+const DANGER_STEPS = [
+  {
+    msg: '高危警告！！！请勿点击，点击后若出现任何情况，开发者概不负责！！！',
+    proceed: '我不听！',
+  },
+  {
+    msg: '开发者已经做出明确警告与责任声明，你是否继续？',
+    proceed: '继续',
+  },
+  {
+    msg: '最后一次确认，你真的要继续吗？',
+    proceed: '继续',
+  },
+];
+
+function startDangerFlow() {
+  dangerStep = 0;
+  showDangerStep(0);
+  openModal('dangerModal');
+}
+
+function showDangerStep(step) {
+  const cfg = DANGER_STEPS[step];
+  $('dangerMsg').textContent = cfg.msg;
+  $('btnDangerProceed').textContent = cfg.proceed;
+  // 一级“我不听！”用描边样式，二三级“继续”用红色危险样式
+  const red = step > 0;
+  $('btnDangerProceed').classList.toggle('btn-danger', red);
+  $('btnDangerProceed').classList.toggle('btn-outline', !red);
+}
+
+function proceedDangerFlow() {
+  if (dangerStep < 2) {
+    dangerStep += 1;
+    showDangerStep(dangerStep);
+    return;
+  }
+  // 三级确认通过：关闭弹窗，播放内置音频
+  closeModal('dangerModal');
+  playDangerAudio();
+}
+
+function exitDangerFlow() {
+  if (dangerAudio) { dangerAudio.pause(); dangerAudio = null; }
+  closeModal('dangerModal');
+  showToast('info', '已退出', '还好你及时收手了', 2500);
+}
+
+async function playDangerAudio() {
+  try {
+    const r = await window.labAPI.readAudioFile();
+    if (!r.ok) throw new Error(r.error);
+    const url = `data:${r.mime};base64,${r.data}`;
+    const audio = new Audio(url);
+    dangerAudio = audio;
+    await audio.play();
+    audio.onended = () => { dangerAudio = null; backToMain(); };
+    audio.onerror = () => { dangerAudio = null; backToMain(); };
+  } catch (err) {
+    dangerAudio = null;
+    showToast('error', '播放失败', err.message, 4000);
+    backToMain();
+  }
+}
+
+function backToMain() {
+  // 关闭所有弹窗，回到主界面（生成页）
+  closeModal('settingsModal');
+  closeModal('dangerModal');
+  switchTab('generate');
 }
 
 // ── 报告管理（设置页）──
+let lastReportsList = [];   // 最近一次列表结果（供"删除全部"使用）
+
 function fmtSize(bytes) {
   if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
@@ -1308,6 +1653,9 @@ async function loadReportsList() {
     const r = await window.labAPI.listReports();
     reports = (r && r.ok && Array.isArray(r.reports)) ? r.reports : [];
   } catch (e) { reports = []; }
+  lastReportsList = reports;
+  const delAllBtn = $('btnDeleteAllReports');
+  if (delAllBtn) delAllBtn.disabled = !reports.length;
   if (!reports.length) {
     summary.textContent = '暂无已生成的报告。先选择实验并点击「生成报告」。';
     return;
@@ -1343,15 +1691,7 @@ async function loadReportsList() {
       const rr = await window.labAPI.deleteReport(rep.path);
       if (rr && rr.ok) {
         showToast('success', '已删除', rep.file);
-        await loadReportsList();
-        // 同步实验列表状态（角标/报告文件/预览可用性）
-        experiments = await window.labAPI.scanExperiments();
-        experiments.forEach(e => { e.category = getCategory(e.name); });
-        renderList($('searchInput').value);
-        if (currentExp) {
-          const updated = experiments.find(e => e.id === currentExp.id);
-          if (updated) selectExperiment(updated);
-        }
+        await refreshAfterReportChange();
       } else {
         showToast('error', '删除失败', (rr && rr.error) || '未知错误', 5000);
       }
@@ -1363,16 +1703,47 @@ async function loadReportsList() {
   }
 }
 
-// ── 导入润色结果并重新生成报告 ──
+// 报告增删后同步：刷新管理列表 + 实验列表状态（角标/报告文件/预览可用性）
+async function refreshAfterReportChange() {
+  await loadReportsList();
+  experiments = await window.labAPI.scanExperiments();
+  experiments.forEach(e => { e.category = getCategory(e.name); });
+  updateCategoryCounts();
+  updateEmptyStats();
+  renderList($('searchInput').value);
+  if (currentExp) {
+    const updated = experiments.find(e => e.id === currentExp.id);
+    if (updated) selectExperiment(updated);
+  }
+}
+
+async function deleteAllReports() {
+  const reports = lastReportsList || [];
+  if (!reports.length) return;
+  if (!confirm(`删除全部 ${reports.length} 份已生成报告？\n（仅移除报告文件，测量数据、变体与已导入润色不受影响）`)) return;
+  let ok = 0, fail = 0;
+  for (const rep of reports) {
+    try {
+      const rr = await window.labAPI.deleteReport(rep.path);
+      if (rr && rr.ok) ok++; else fail++;
+    } catch (e) { fail++; }
+  }
+  if (fail) showToast('warning', `已删除 ${ok} 份`, `${fail} 份删除失败（可能被 Word 占用，关闭后重试）`, 6000);
+  else showToast('success', '已删除全部报告', `共 ${ok} 份`);
+  await refreshAfterReportChange();
+}
+
+// ── 导入润色结果并重新生成报告（导入本轮全部可导入章节）──
 async function importPolishAndRegenerate() {
   if (!currentExp) return;
-  if (!lastPolishSection || !lastPolishedText.trim()) {
-    showToast('warning', '无法导入', '仅标注"可导入"的润色章节支持导入重生成');
+  const ok = (lastPolishResults || []).filter(r => r.section && r.polished && r.polished.trim());
+  if (!ok.length) {
+    showToast('warning', '无法导入', '本次结果中没有可导入的章节（仅"可导入"章节支持注入重生成）');
     return;
   }
-  setPolishOverride(currentExp.id, lastPolishSection, lastPolishedText);
+  for (const r of ok) setPolishOverride(currentExp.id, r.section, r.polished);
   updateOverrideBar();
-  showToast('info', '已导入', `正在以「${lastPolishSection}」润色文本重新生成报告…`);
+  showToast('info', '已导入 ' + ok.length + ' 个章节', ok.map(r => r.section).join('、') + ' —— 正在重新生成报告…');
   await runGenerate();
 }
 
@@ -1513,6 +1884,10 @@ function refreshExperimentAfterGenerate(updated) {
 async function runGenerateReport(btn, genExpId) {
   const genExp = experiments.find(e => e.id === genExpId) || currentExp;
   const studentInfo = loadStudentInfo();
+  // 学生信息未填写时提醒（报告头部将显示"（未填写）"）
+  if (!studentInfo.name || !studentInfo.id || !studentInfo.class) {
+    showToast('warning', '学生信息未填写', '报告头部将显示（未填写），可在右上角「学生信息」中填写', 5000);
+  }
   // 收集变体组合选择（值为 -1 的"随机"在此真正随机）
   const variantChoices = {};
   document.querySelectorAll('.variant-select').forEach(sel => {

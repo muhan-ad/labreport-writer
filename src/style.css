@@ -1578,15 +1578,6 @@ body {
   font-weight: 500;
 }
 
-/* 历史记录 */
-.history-empty {
-  text-align: center;
-  color: var(--text-muted);
-  padding: 30px 0;
-}
-.history-empty svg { width: 40px; height: 40px; margin-bottom: 10px; opacity: 0.4; }
-.history-empty p { font-size: 13px; }
-
 /* ── 弹窗 ── */
 .modal-overlay {
   display: none;
@@ -2292,3 +2283,88 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .report-meta { font-size: 12px; color: var(--text-muted, #a8a29e); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .report-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .report-del:hover { color: #dc2626; }
+
+/* ── AI 润色：多选组与多结果展示 ── */
+.ai-check-group { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; }
+.ai-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #333; cursor: pointer; user-select: none; }
+.ai-check input[type="checkbox"] { accent-color: var(--accent, #4a7cf7); cursor: pointer; }
+.ai-check-empty { font-size: 12px; color: var(--text-muted, #a8a29e); }
+.ai-result-block { border: 1px solid var(--border, #e7e5e4); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.ai-result-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.ai-result-title { font-size: 13px; font-weight: 600; color: #333; margin-right: auto; }
+.ai-result-error { font-size: 12px; color: #c53030; }
+
+/* ── 设置 · 使用说明页 ── */
+.help-section { line-height: 1.7; }
+.help-list { margin: 6px 0 0; padding-left: 20px; font-size: 13px; color: #444; }
+.help-list li { margin-bottom: 5px; }
+.help-list li b { color: #222; }
+
+/* ── 设置 · 请勿点击（高危彩蛋）── */
+.settings-nav-danger { color: #c53030; }
+.settings-nav-danger:hover { background: rgba(220, 38, 38, 0.08); }
+.settings-nav-danger.active {
+  background: rgba(220, 38, 38, 0.12);
+  color: #c53030;
+  font-weight: 600;
+}
+.danger-section { text-align: center; padding: 24px 12px; }
+.danger-title { color: #c53030; }
+.danger-hint { color: #b91c1c; margin-bottom: 16px; }
+.btn-lg { padding: 12px 24px; font-size: 15px; border-radius: 10px; }
+.btn-block { display: block; width: 100%; }
+#paneDanger .btn-danger { font-size: 16px; font-weight: 700; letter-spacing: 2px; }
+
+/* 高危警告弹窗 */
+.modal-danger { width: 440px; border: 2px solid rgba(220, 38, 38, 0.4); }
+#dangerModal .modal-header { border-bottom: 1px solid rgba(220, 38, 38, 0.25); }
+.danger-body { text-align: center; padding: 22px 20px 10px; }
+.danger-icon {
+  font-size: 52px;
+  line-height: 1;
+  color: #dc2626;
+  margin-bottom: 14px;
+  animation: dangerPulse 1s ease-in-out infinite;
+}
+@keyframes dangerPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.12); opacity: 0.85; }
+}
+.danger-msg {
+  font-size: 15px;
+  font-weight: 600;
+  color: #b91c1c;
+  line-height: 1.7;
+  margin: 0;
+}
+.danger-footer { justify-content: center; gap: 12px; padding-bottom: 18px; }
+
+/* ── 检查更新 ── */
+.update-meta { font-size: 14px; font-weight: 600; color: #222; margin: 0 0 10px; }
+.update-notes {
+  background: #f7f7fb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 13px;
+  color: #444;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.update-progress { margin-top: 12px; }
+.progress-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+.update-progress-text { font-size: 12px; color: #666; margin: 6px 0 0; }

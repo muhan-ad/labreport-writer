@@ -242,14 +242,14 @@ def _generate_docx(data: dict, output_path: str):
     # ── 合成不确定度 ──
     doc.add_heading("2.6 合成不确定度与测量结果", level=2)
 
-    doc.add_paragraph("l̄_k 的合成不确定度：")
+    doc.add_paragraph_rich(r"$\bar{l}_k$ 的合成不确定度：")
     doc.add_math(
         r"\Delta l = \sqrt{\Delta x_A^{2} + \Delta x_B^{2}}"
         r" = \sqrt{" + format_number(u_A) + r"^{2} + " + format_number(u_B) + r"^{2}}"
         r" = " + format_number(u_l) + r"\,\mathrm{mm}"
     )
 
-    doc.add_paragraph("不确定度传递到细丝直径（d ∝ 1/l̄_k）：")
+    doc.add_paragraph_rich(r"不确定度传递到细丝直径（$d \propto 1/\bar{l}_k$）：")
     doc.add_math(
         r"\Delta d = \frac{\Delta l}{\bar{l}_k} \cdot \bar{d}"
         r" = \frac{" + format_number(u_l) + r"}{" + format_number(l_bar_k) + r"}"
@@ -258,9 +258,12 @@ def _generate_docx(data: dict, output_path: str):
     )
 
     doc.add_paragraph("细丝直径测量结果：")
+    d_power = math.floor(math.log10(d_bar))
     doc.add_math(
         r"d = \bar{d} \pm \Delta d = ("
-        + d_display + r" \pm " + u_d_display + r")\,\mathrm{mm}"
+        + format_number(d_bar / 10 ** d_power, u_d / 10 ** d_power)
+        + r" \pm " + format_number(u_d / 10 ** d_power, u_d / 10 ** d_power)
+        + r") \times 10^{" + f"{d_power}" + r"}\,\mathrm{mm}"
     )
 
     # ════════════════════════════════

@@ -388,7 +388,7 @@ def _generate_docx(data: dict, output_path: str) -> bool:
     doc.add_inline_math(r"f_{0}' = " + f"{f0p:.3f}" + r"\ \mathrm{kHz}")
     doc.add_run("，则误差：")
     doc.add_math(r"\eta = \frac{|f_{0} - f_{0}'|}{f_{0}} \approx "
-                 + f"{eta:.2f}" + "%")
+                 + f"{format_percent(eta)}" + "%")
 
     # 2. 幅频特性的测量
     doc.add_heading("2. 幅频特性的测量", level=2)

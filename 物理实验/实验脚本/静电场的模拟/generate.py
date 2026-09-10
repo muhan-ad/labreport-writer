@@ -230,9 +230,9 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_heading("四、思考题", level=1)
 
     doc.add_heading("1. 为什么可以用稳恒电流场模拟静电场？", level=2)
-    doc.add_paragraph(
+    doc.add_paragraph_rich(
         "答：稳恒电流场与静电场在一定条件下具有相似的空间分布。"
-        "两者都满足拉普拉斯方程（∇²U = 0），且在相同的边界条件下具有相同的解。"
+        r"两者都满足拉普拉斯方程（$\nabla^2 U = 0$），且在相同的边界条件下具有相同的解。"
         "因此可以用容易测量的稳恒电流场来模拟难以直接测量的静电场。"
     )
 

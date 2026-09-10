@@ -1,0 +1,152 @@
+{
+ "实验": "电子偏转特性的测量",
+ "groups": [
+  {
+   "name": "表1 X轴方向电偏转（U_dx/V）",
+   "fields": [
+    {
+     "key": "D_x",
+     "label": "屏上偏转量 D（给定）",
+     "type": "array",
+     "length": 9,
+     "unit": "mm",
+     "required": true,
+     "default": [
+      -16,
+      -12,
+      -8,
+      -4,
+      0,
+      4,
+      8,
+      12,
+      16
+     ]
+    },
+    {
+     "key": "Udx",
+     "label": "X轴偏转电压 Udx（1000/900/800V）",
+     "type": "matrix",
+     "rows": 3,
+     "cols": 9,
+     "unit": "V",
+     "required": true,
+     "rowLabels": [
+      "U₂=1000V",
+      "U₂=900V",
+      "U₂=800V"
+     ],
+     "colLabels": [
+      "D=-16mm",
+      "D=-12mm",
+      "D=-8mm",
+      "D=-4mm",
+      "D=0mm",
+      "D=4mm",
+      "D=8mm",
+      "D=12mm",
+      "D=16mm"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "表2 Y轴方向电偏转（U_dy/V）",
+   "fields": [
+    {
+     "key": "D_y",
+     "label": "屏上偏转量 D（给定）",
+     "type": "array",
+     "length": 9,
+     "unit": "mm",
+     "required": true,
+     "default": [
+      -16,
+      -12,
+      -8,
+      -4,
+      0,
+      4,
+      8,
+      12,
+      16
+     ]
+    },
+    {
+     "key": "Udy",
+     "label": "Y轴偏转电压 Udy（1000/900/800V）",
+     "type": "matrix",
+     "rows": 3,
+     "cols": 9,
+     "unit": "V",
+     "required": true,
+     "rowLabels": [
+      "U₂=1000V",
+      "U₂=900V",
+      "U₂=800V"
+     ],
+     "colLabels": [
+      "D=-16mm",
+      "D=-12mm",
+      "D=-8mm",
+      "D=-4mm",
+      "D=0mm",
+      "D=4mm",
+      "D=8mm",
+      "D=12mm",
+      "D=16mm"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "表3 磁偏转（I_m/mA）",
+   "fields": [
+    {
+     "key": "D_m",
+     "label": "屏上偏转量 D（给定）",
+     "type": "array",
+     "length": 9,
+     "unit": "mm",
+     "required": true,
+     "default": [
+      -16,
+      -12,
+      -8,
+      -4,
+      0,
+      4,
+      8,
+      12,
+      16
+     ]
+    },
+    {
+     "key": "Im",
+     "label": "磁偏转电流 Im（1000/900/800V）",
+     "type": "matrix",
+     "rows": 3,
+     "cols": 9,
+     "unit": "mA",
+     "required": true,
+     "rowLabels": [
+      "U₂=1000V",
+      "U₂=900V",
+      "U₂=800V"
+     ],
+     "colLabels": [
+      "D=-16mm",
+      "D=-12mm",
+      "D=-8mm",
+      "D=-4mm",
+      "D=0mm",
+      "D=4mm",
+      "D=8mm",
+      "D=12mm",
+      "D=16mm"
+     ]
+    }
+   ]
+  }
+ ]
+}

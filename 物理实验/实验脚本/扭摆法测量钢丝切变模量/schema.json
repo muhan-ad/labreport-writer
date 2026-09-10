@@ -1,0 +1,88 @@
+{
+ "实验": "扭摆法测量钢丝切变模量",
+ "groups": [
+  {
+   "name": "转动周期测量（每次测 30 个周期总时间，5 次）",
+   "fields": [
+    {
+     "key": "t_disk",
+     "label": "摆盘转动时间",
+     "type": "array",
+     "length": 5,
+     "unit": "s",
+     "required": true
+    },
+    {
+     "key": "t_ring",
+     "label": "摆盘+圆环转动时间",
+     "type": "array",
+     "length": 5,
+     "unit": "s",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "钢丝直径测量（千分尺）",
+   "fields": [
+    {
+     "key": "d_zero",
+     "label": "零误差 d₀",
+     "type": "number",
+     "unit": "mm",
+     "required": true
+    },
+    {
+     "key": "d_horiz",
+     "label": "横向直径 d（3 位置）",
+     "type": "array",
+     "length": 3,
+     "unit": "mm",
+     "required": true
+    },
+    {
+     "key": "d_vert",
+     "label": "纵向直径 d（3 位置）",
+     "type": "array",
+     "length": 3,
+     "unit": "mm",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "单次测量量",
+   "fields": [
+    {
+     "key": "l_mm",
+     "label": "钢丝长度 l",
+     "type": "number",
+     "unit": "mm",
+     "required": true
+    },
+    {
+     "key": "D1_mm",
+     "label": "圆环内径 D₁",
+     "type": "number",
+     "unit": "mm",
+     "required": true
+    },
+    {
+     "key": "D2_mm",
+     "label": "圆环外径 D₂",
+     "type": "number",
+     "unit": "mm",
+     "required": true
+    },
+    {
+     "key": "m_g",
+     "label": "圆环质量 m",
+     "type": "number",
+     "unit": "g",
+     "default": 480,
+     "required": true
+    }
+   ]
+  }
+ ]
+}

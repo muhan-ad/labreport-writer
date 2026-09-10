@@ -1,0 +1,113 @@
+{
+ "实验": "霍尔效应实验",
+ "groups": [
+  {
+   "name": "给定量",
+   "fields": [
+    {
+     "key": "kh",
+     "label": "霍尔片灵敏度 K_H（按元件标称值填写）",
+     "type": "number",
+     "unit": "V/(A·T)",
+     "required": true
+    },
+    {
+     "key": "i_work",
+     "label": "表1 工作电流 I",
+     "type": "number",
+     "unit": "mA",
+     "default": 10.0,
+     "required": true
+    },
+    {
+     "key": "im_fixed",
+     "label": "表2 励磁电流 Im",
+     "type": "number",
+     "unit": "mA",
+     "default": 500.0,
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "表1 磁感应强度的测量（I = 10 mA，9 组）",
+   "fields": [
+    {
+     "key": "t1_im",
+     "label": "励磁电流 I_m",
+     "type": "array",
+     "length": 9,
+     "unit": "mA",
+     "required": true,
+     "default": [
+      200,
+      300,
+      400,
+      500,
+      600,
+      700,
+      800,
+      900,
+      1000
+     ]
+    },
+    {
+     "key": "t1_u1",
+     "label": "(+B,+I) U₁",
+     "type": "array",
+     "length": 9,
+     "unit": "mV",
+     "required": true
+    },
+    {
+     "key": "t1_u2",
+     "label": "(+B,−I) U₂",
+     "type": "array",
+     "length": 9,
+     "unit": "mV",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "表2 磁感应强度与工作电流的关系（Im = 500 mA，9 组）",
+   "fields": [
+    {
+     "key": "t2_i",
+     "label": "工作电流 I",
+     "type": "array",
+     "length": 9,
+     "unit": "mA",
+     "required": true,
+     "default": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+     ]
+    },
+    {
+     "key": "t2_u1",
+     "label": "(+B,+I) U₁",
+     "type": "array",
+     "length": 9,
+     "unit": "mV",
+     "required": true
+    },
+    {
+     "key": "t2_u2",
+     "label": "(+B,−I) U₂",
+     "type": "array",
+     "length": 9,
+     "unit": "mV",
+     "required": true
+    }
+   ]
+  }
+ ]
+}

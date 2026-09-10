@@ -204,7 +204,8 @@ ipcMain.handle('scan-experiments', () => {
     // 方式三：数据真相为 data.json / schema.json（xlsx 为遗留模板，不再参与判定）
     const hasDataJson = files.includes('data.json');
     const hasSchemaJson = files.includes('schema.json');
-    const docx = files.find(f => f.endsWith('.docx'));
+    // 跳过 Word 属主文件（~$开头）与生成中的临时报告（.~saving）
+    const docx = files.find(f => f.endsWith('.docx') && !f.startsWith('~$') && !f.includes('.~saving'));
     results.push({
       id: d.name,
       name: d.name,
@@ -389,7 +390,7 @@ ipcMain.handle('list-reports', () => {
       let files;
       try { files = fs.readdirSync(expPath); } catch (e) { continue; }
       for (const f of files) {
-        if (!f.toLowerCase().endsWith('.docx') || f.startsWith('~$')) continue;
+        if (!f.toLowerCase().endsWith('.docx') || f.startsWith('~$') || f.includes('.~saving')) continue;
         try {
           const st = fs.statSync(path.join(expPath, f));
           out.push({ exp: d.name, file: f, path: path.join(expPath, f), size: st.size, mtime: st.mtimeMs });
@@ -462,6 +463,241 @@ ipcMain.handle('read-docx-buffer', (_, filePath) => {
   }
 });
 
+// ── IPC: 读取内置音频（src/ 下随包分发，任何环境均可播放）──
+ipcMain.handle('read-audio-file', () => {
+  try {
+    const filePath = path.join(__dirname, 'src', 'do-not-click.mp3');
+    if (!fs.existsSync(filePath)) return { ok: false, error: '音频文件不存在' };
+    const buffer = fs.readFileSync(filePath);
+    return { ok: true, mime: 'audio/mpeg', data: buffer.toString('base64') };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// ═══════════════════════════════════════════════
+// 检查更新（Gitee Release / 自定义清单，国内用户高速可达）
+// ═══════════════════════════════════════════════
+const https = require('https');
+const dns = require('dns');
+
+function compareVersions(a, b) {
+  const pa = String(a).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+// 拒绝 localhost / 环回 / 私有 / 链路本地 / 组播 / 保留地址，只允许公网主机
+function isBlockedHost(host) {
+  const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '').split(':')[0];
+  if (!h || h === 'localhost' || h.endsWith('.local') || h.endsWith('.lan')) return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
+    const p = h.split('.').map(Number);
+    if (p.some(x => x > 255)) return true;
+    const [a, b] = p;
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;   // CGNAT 100.64.0.0/10
+    if (a === 169 && b === 254) return true;             // 链路本地
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true;
+    if (a >= 224) return true;                           // 组播/保留
+    return false;
+  }
+  return false;
+}
+
+// 校验更新 URL：仅 http/https，host 拒绝本地/私有地址
+function assertPublicUrl(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch (e) { throw new Error('更新地址格式不正确'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    throw new Error('仅支持 http/https 地址');
+  }
+  if (isBlockedHost(u.hostname)) throw new Error('不允许访问本地或私有地址');
+  return u;
+}
+
+// 域名解析后再次核验：解析结果必须全部为公网 IP
+function checkPublicDns(hostname) {
+  return new Promise((resolve) => {
+    dns.lookup(hostname, { all: true }, (err, addrs) => {
+      if (err || !addrs || !addrs.length) return resolve(false);
+      resolve(addrs.every(a => !isBlockedHost(a.address)));
+    });
+  });
+}
+
+// GET JSON（跟随重定向、超时、UA）
+function httpsGetJson(url, timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: { 'User-Agent': 'labreport-writer-updater' },
+      timeout,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return resolve(httpsGetJson(res.headers.location, timeout));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', c => { data += c; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error('响应解析失败')); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('请求超时')));
+  });
+}
+
+// ── IPC: 当前应用版本 ──
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+// 检查更新：优先使用自定义清单地址（latest.json），否则查询 Gitee 最新 Release
+ipcMain.handle('check-for-update', async (_, cfg) => {
+  try {
+    const manifestUrl = String((cfg && cfg.manifestUrl) || '').trim();
+    const current = app.getVersion();
+
+    // 自定义清单：{ version, notes, url, fileName }
+    if (manifestUrl) {
+      const u = assertPublicUrl(manifestUrl);
+      if (!(await checkPublicDns(u.hostname))) {
+        throw new Error('更新地址无法解析或指向本地地址');
+      }
+      const mf = await httpsGetJson(u.href);
+      const latest = String(mf.version || '').replace(/^v/i, '');
+      const hasUpdate = !!(latest && compareVersions(latest, current) > 0);
+      const dlUrl = String(mf.url || '').trim();
+      let safeDlUrl = '';
+      if (dlUrl) {
+        const du = assertPublicUrl(dlUrl);
+        if (!(await checkPublicDns(du.hostname))) {
+          throw new Error('安装包下载地址无法解析或指向本地地址');
+        }
+        safeDlUrl = du.href;
+      }
+      return {
+        ok: true,
+        hasUpdate,
+        current,
+        latest,
+        notes: String(mf.notes || '').trim(),
+        assets: safeDlUrl
+          ? [{ name: String(mf.fileName || 'update.exe'), url: safeDlUrl, size: 0 }]
+          : [],
+        releaseUrl: '',
+      };
+    }
+
+    // Gitee Release 路径
+    const owner = String((cfg && cfg.owner) || '').trim().replace(/[^\w-]/g, '');
+    const repo = String((cfg && cfg.repo) || '').trim().replace(/[^\w-]/g, '');
+    if (!owner || !repo) {
+      return { ok: false, error: '请先在设置中填写 Gitee 用户名与仓库名，或填写自定义更新清单地址' };
+    }
+    const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/latest`;
+    if (!url.startsWith('https://gitee.com/')) {
+      return { ok: false, error: '更新源必须为 Gitee 地址' };
+    }
+    const rel = await httpsGetJson(url);
+    const latest = String(rel.tag_name || '').replace(/^v/i, '');
+    const hasUpdate = !!(latest && compareVersions(latest, current) > 0);
+    const assets = [];
+    for (const a of (rel.assets || [])) {
+      if (!/\.(exe|msi|zip)$/i.test(String(a.name || ''))) continue;
+      const du = assertPublicUrl(a.browser_download_url);
+      if (!(await checkPublicDns(du.hostname))) continue;
+      assets.push({ name: a.name, url: du.href, size: a.size || 0 });
+    }
+    return {
+      ok: true,
+      hasUpdate,
+      current,
+      latest,
+      notes: String(rel.body || '').trim(),
+      assets,
+      releaseUrl: rel.html_url || '',
+    };
+  } catch (err) {
+    return { ok: false, error: err.message, hasUpdate: false };
+  }
+});
+
+// 取消下载：销毁当前更新下载请求
+let activeUpdateReq = null;
+ipcMain.on('cancel-update-download', () => {
+  if (activeUpdateReq) {
+    try { activeUpdateReq.destroy(); } catch (e) { /* 忽略 */ }
+    activeUpdateReq = null;
+  }
+});
+
+// 下载更新安装包（进度经 'update-download-progress' 回传）
+ipcMain.handle('download-update', async (event, payload) => {
+  const rawUrl = String((payload && payload.url) || '');
+  let url;
+  try {
+    const u = assertPublicUrl(rawUrl);
+    if (!(await checkPublicDns(u.hostname))) throw new Error('下载地址无法解析或指向本地地址');
+    url = u.href;
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  const fileName = path.basename(String((payload && payload.name) || 'update.exe'));
+  if (!fileName || fileName.includes('..') || /[\\/]/.test(fileName)) {
+    return { ok: false, error: '非法的文件名' };
+  }
+  const dlRoot = path.resolve(app.getPath('downloads'));
+  const dest = path.resolve(dlRoot, fileName);
+  if (!dest.startsWith(dlRoot + path.sep)) {
+    return { ok: false, error: '非法的文件路径' };
+  }
+  const sendProgress = (percent) => {
+    try { event.sender.send('update-download-progress', { percent }); } catch (e) { /* 窗口可能已关闭 */ }
+  };
+  return new Promise((resolve) => {
+    const req = https.get(url, {
+      headers: { 'User-Agent': 'labreport-writer-updater' },
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        activeUpdateReq = null;
+        return resolve({ ok: false, error: '下载地址发生了重定向，请稍后重试' });
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        activeUpdateReq = null;
+        return resolve({ ok: false, error: `下载失败 HTTP ${res.statusCode}` });
+      }
+      const total = parseInt(res.headers['content-length'] || '0', 10) || 0;
+      let received = 0;
+      const out = fs.createWriteStream(dest);
+      res.pipe(out);
+      res.on('data', (chunk) => {
+        received += chunk.length;
+        if (total) sendProgress(Math.min(99, Math.round(received * 100 / total)));
+      });
+      out.on('finish', () => { activeUpdateReq = null; sendProgress(100); resolve({ ok: true, filePath: dest }); });
+      out.on('error', (e) => { activeUpdateReq = null; res.destroy(); resolve({ ok: false, error: e.message }); });
+      res.on('error', (e) => { activeUpdateReq = null; out.destroy(); resolve({ ok: false, error: e.message }); });
+    });
+    req.on('error', (e) => { activeUpdateReq = null; resolve({ ok: false, error: e.message }); });
+    activeUpdateReq = req;
+  });
+});
+
 // ── IPC: 用默认程序打开文件 ──
 ipcMain.handle('open-file', (_, filePath) => {
   if (fs.existsSync(filePath)) {
@@ -482,6 +718,10 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants, polish)
 
   // 构建环境变量（注入学生信息）
   const env = { ...process.env };
+  // 强制 Python 管道输出为 UTF-8：中文 Windows 默认区域编码为 GBK，
+  // 而本进程按 UTF-8 解码 stdout（data.toString()），不强制会导致日志与章节缓存乱码
+  env.PYTHONIOENCODING = 'utf-8';
+  env.PYTHONUTF8 = '1';
   if (studentInfo) {
     if (studentInfo.name) env.LAB_STUDENT_NAME = studentInfo.name;
     if (studentInfo.id) env.LAB_STUDENT_ID = studentInfo.id;
@@ -556,11 +796,11 @@ ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants, polish)
           fs.writeFileSync(path.join(expPath, '.lab_sections.json'), JSON.stringify(capturedSections, null, 1), 'utf-8');
         } catch (e) { /* 缓存失败不影响生成结果 */ }
       }
-      // 扫描生成的 docx
+      // 扫描生成的 docx（跳过 Word 属主文件与生成中/残留的临时报告）
       let reportFile = null;
       const files = fs.readdirSync(expPath);
       for (const f of files) {
-        if (f.endsWith('.docx')) {
+        if (f.endsWith('.docx') && !f.startsWith('~$') && !f.includes('.~saving')) {
           reportFile = path.join(expPath, f);
           break;
         }

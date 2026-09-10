@@ -172,7 +172,7 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run("合成不确定度：")
     doc.add_math(
         r"u(d) = \sqrt{u_A(d)^2 + \left(\frac{\Delta_{inst}}{\sqrt{3}}\right)^2} = "
-        + format_number(r["d_u"], 6)
+        + format_number(r["d_u"], sig_figs=6)
         + r" \text{ mm}"
     )
 

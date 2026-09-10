@@ -1,0 +1,102 @@
+{
+ "实验": "灵敏电流计特性的测量",
+ "groups": [
+  {
+   "name": "实验参数",
+   "fields": [
+    {
+     "key": "rs",
+     "label": "标准电阻 Rs",
+     "type": "number",
+     "unit": "Ω",
+     "default": 0.1,
+     "required": true
+    },
+    {
+     "key": "rg_th",
+     "label": "内阻 Rg 理论值",
+     "type": "number",
+     "unit": "Ω",
+     "default": 27.0,
+     "required": true
+    },
+    {
+     "key": "ki_th",
+     "label": "电流常数 Ki 理论值",
+     "type": "number",
+     "unit": "A/mm",
+     "default": 2.7e-09,
+     "required": true
+    },
+    {
+     "key": "rc_th",
+     "label": "外临界电阻 Rc 理论值",
+     "type": "number",
+     "unit": "Ω",
+     "default": 430.0,
+     "required": true
+    },
+    {
+     "key": "r1",
+     "label": "限流电阻 R1",
+     "type": "number",
+     "unit": "Ω",
+     "required": true
+    },
+    {
+     "key": "d",
+     "label": "偏转距离 d",
+     "type": "number",
+     "unit": "mm",
+     "default": 30.0,
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "定偏法 R-U 数据（10 点，偏转距离 d 保持不变）",
+   "fields": [
+    {
+     "key": "R",
+     "label": "电阻 R",
+     "type": "array",
+     "length": 10,
+     "unit": "Ω",
+     "required": true,
+     "default": [
+      500.0,
+      450.0,
+      400.0,
+      350.0,
+      300.0,
+      250.0,
+      200.0,
+      150.0,
+      100.0,
+      50.0
+     ]
+    },
+    {
+     "key": "U",
+     "label": "电压 U",
+     "type": "array",
+     "length": 10,
+     "unit": "V",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "可选",
+   "fields": [
+    {
+     "key": "rc_exp",
+     "label": "外临界电阻 Rc 实验值",
+     "type": "number",
+     "unit": "Ω",
+     "required": false
+    }
+   ]
+  }
+ ]
+}

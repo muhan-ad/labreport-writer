@@ -1,0 +1,50 @@
+{
+ "实验": "声速的测量（空气）",
+ "groups": [
+  {
+   "name": "实验参数",
+   "fields": [
+    {
+     "key": "f",
+     "label": "谐振频率 f",
+     "type": "number",
+     "unit": "kHz",
+     "required": true
+    },
+    {
+     "key": "t",
+     "label": "室温 t",
+     "type": "number",
+     "unit": "°C",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "共振干涉法（驻波法）— 振幅极大值位置（12 次）",
+   "fields": [
+    {
+     "key": "L1",
+     "label": "位置 L_i",
+     "type": "array",
+     "length": 12,
+     "unit": "mm",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "位相比较法（李萨如图形法）— 同/反相点位置（12 次）",
+   "fields": [
+    {
+     "key": "L2",
+     "label": "位置 L_i",
+     "type": "array",
+     "length": 12,
+     "unit": "mm",
+     "required": true
+    }
+   ]
+  }
+ ]
+}

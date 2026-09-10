@@ -9,5 +9,5 @@
 
 from .uncertainty import mean, std_dev, type_a, type_b, combine, propagate_numeric
 from .regression import linear_regression, LinearRegressionResult
-from .latex_formatter import format_number, format_scientific, build_formula
+from .latex_formatter import format_number, format_scientific, format_percent, build_formula
 from .data_io import load_data

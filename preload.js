@@ -31,6 +31,16 @@ contextBridge.exposeInMainWorld('labAPI', {
   // 报告预览
   docxToHtml: (filePath) => ipcRenderer.invoke('docx-to-html', filePath),
   readDocxBuffer: (filePath) => ipcRenderer.invoke('read-docx-buffer', filePath),
+  // 内置音频（彩蛋播放）
+  readAudioFile: () => ipcRenderer.invoke('read-audio-file'),
+  // 检查更新（Gitee Release / 自定义清单）
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  checkForUpdate: (cfg) => ipcRenderer.invoke('check-for-update', cfg),
+  downloadUpdate: (payload) => ipcRenderer.invoke('download-update', payload),
+  cancelUpdateDownload: () => ipcRenderer.send('cancel-update-download'),
+  onUpdateProgress: (callback) => {
+    ipcRenderer.on('update-download-progress', (_, data) => callback(data));
+  },
   // AI 对话
   aiChat: (params) => ipcRenderer.invoke('ai-chat', params),
   // 变体组合

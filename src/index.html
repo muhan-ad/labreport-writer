@@ -194,7 +194,6 @@
             <button class="tab-item" data-tab="generate">生成报告</button>
             <button class="tab-item" data-tab="preview">报告预览</button>
             <button class="tab-item" data-tab="ai">AI 润色</button>
-            <button class="tab-item" data-tab="history">历史记录</button>
           </div>
 
           <!-- Tab 内容 -->
@@ -207,6 +206,7 @@
                   <h4>测量数据</h4>
                   <div class="card-header-actions">
                     <button class="btn btn-sm btn-outline" id="btnReloadData">重新加载</button>
+                    <button class="btn btn-sm btn-outline" id="btnClearFormData" disabled>清除数据</button>
                     <button class="btn btn-sm btn-primary" id="btnSaveData" disabled>保存修改</button>
                   </div>
                 </div>
@@ -336,14 +336,14 @@
                       </div>
                     </div>
                     <div class="ai-option-group">
-                      <label>润色对象</label>
-                      <select class="ai-select" id="aiScopeSel"></select>
+                      <label>润色对象（可多选）</label>
+                      <div class="ai-check-group" id="aiScopeGroup"></div>
                       <span class="ai-option-note">标注"可导入"的章节以报告源文为原文（公式保留 LaTeX），润色后可导入并重新生成报告</span>
                     </div>
                     <div class="ai-option-group">
-                      <label>润色技能（Skill）</label>
-                      <select class="ai-select" id="aiSkillSel"></select>
-                      <span class="ai-option-note">技能在「设置 → AI 润色技能」中自定义</span>
+                      <label>润色技能（可多选，指令按顺序叠加）</label>
+                      <div class="ai-check-group" id="aiSkillGroup"></div>
+                      <span class="ai-option-note">技能在「设置 → AI 润色技能」中导入与管理；不选则仅用写作风格</span>
                     </div>
                     <div class="ai-option-group">
                       <label class="checkbox-label"><input type="checkbox" id="chkKbOnly" checked /> 限定知识库：只依据本实验教材原理润色</label>
@@ -367,21 +367,11 @@
                 <div class="card-header">
                   <h4>润色结果</h4>
                   <div class="card-header-actions">
-                    <button class="btn btn-sm btn-outline" id="btnCopyAi">复制结果</button>
-                    <button class="btn btn-sm btn-primary" id="btnImportAi" style="display:none;">导入并重新生成报告</button>
+                    <button class="btn btn-sm btn-primary" id="btnImportAi" style="display:none;">导入全部并重新生成报告</button>
                   </div>
                 </div>
                 <div class="card-body">
-                  <div class="ai-compare">
-                    <div class="ai-compare-col">
-                      <div class="ai-compare-label">原文</div>
-                      <div class="ai-compare-text" id="aiOriginalText"></div>
-                    </div>
-                    <div class="ai-compare-col">
-                      <div class="ai-compare-label">润色后</div>
-                      <div class="ai-compare-text ai-polished" id="aiPolishedText"></div>
-                    </div>
-                  </div>
+                  <div id="aiResultsWrap"></div>
                 </div>
               </div>
 
@@ -389,20 +379,7 @@
                 <div class="card-body">
                   <div class="ai-loading">
                     <div class="ai-spinner"></div>
-                    <span>AI 正在润色中...</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 历史记录（预留） -->
-            <div class="tab-pane" id="tab-history">
-              <div class="card">
-                <div class="card-header"><h4>生成历史</h4></div>
-                <div class="card-body">
-                  <div class="history-empty">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    <p>暂无生成记录</p>
+                    <span id="aiLoadingText">AI 正在润色中...</span>
                   </div>
                 </div>
               </div>
@@ -460,6 +437,18 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             报告管理
           </button>
+          <button class="settings-nav-item" id="btnNavHelp">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            使用说明
+          </button>
+          <button class="settings-nav-item" id="btnNavUpdate">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-9-9"/><polyline points="21 3 21 9 15 9"/><polyline points="21 12 21 15 21 21"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+            检查更新
+          </button>
+          <button class="settings-nav-item settings-nav-danger" id="btnNavDanger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            请勿点击
+          </button>
         </div>
         <!-- 模块内容 -->
         <div class="settings-panes">
@@ -512,7 +501,97 @@
               <h4>已生成的报告</h4>
               <div class="form-hint" id="reportsSummary">加载中…</div>
               <div id="reportsList" class="reports-list"></div>
-              <button class="btn btn-sm btn-outline" id="btnRefreshReports" type="button">刷新列表</button>
+              <div class="skill-actions">
+                <button class="btn btn-sm btn-outline" id="btnRefreshReports" type="button">刷新列表</button>
+                <button class="btn btn-sm btn-danger" id="btnDeleteAllReports" type="button" disabled>删除全部报告</button>
+              </div>
+            </div>
+          </div>
+          <!-- 使用说明页 -->
+          <div class="settings-pane" id="paneHelp">
+            <div class="settings-section help-section">
+              <h4>快速上手</h4>
+              <ol class="help-list">
+                <li>左下角配置<b>学生信息</b>（姓名/学号/班级将写入报告封面行）；</li>
+                <li>左侧列表选择实验，在<b>测量数据</b>表单中录入原始数据，点「保存修改」；</li>
+                <li>（可选）在<b>变体组合</b>为各章节选择措辞或保持随机；</li>
+                <li>点「生成报告」，完成后可在<b>报告预览</b>查看，或用 Word 打开；</li>
+                <li>多实验批量处理：列表勾选 → 顶栏「批量生成」→ 队列面板管理；关闭面板后可用顶栏「队列」按钮随时返回。</li>
+              </ol>
+            </div>
+            <div class="settings-section help-section">
+              <h4>数据录入</h4>
+              <ul class="help-list">
+                <li>表单由实验的字段定义自动生成：数字、数组（定长）、矩阵（带行列标签）；</li>
+                <li>「清除数据」把全部字段置空，便于从头填写；「重新加载」放弃未保存修改、恢复已保存数据；</li>
+                <li><b>注意：</b>安装包与仓库自带的均为示例数据，生成前必须替换为本人真实测量值，严禁直接提交示例数据产出。</li>
+              </ul>
+            </div>
+            <div class="settings-section help-section">
+              <h4>AI 个性化润色</h4>
+              <ul class="help-list">
+                <li>先在「AI 服务」页配置提供商 / API Key / 模型（Key 仅存本机，不会上传仓库）；</li>
+                <li><b>润色对象可多选</b>：标注「可导入」的章节以报告源文为原文（公式保留 LaTeX 原码）；「结果分析 / 全文」取自 docx 纯文本，仅支持复制结果；</li>
+                <li><b>限定知识库</b>（默认开启）：润色只依据本实验教材原理，禁止引入知识库外的公式与结论；</li>
+                <li><b>润色技能可多选</b>：技能是导入的外部 Skill 文件（.md，兼容 SKILL.md 格式），在「AI 润色技能」区导入、启用/禁用、删除，指令按勾选顺序叠加；</li>
+                <li>「可导入」章节的润色结果可<b>导入并重新生成报告</b>：Markdown 与 $...$/$$...$$ 公式自动转为 Word 原生公式，数据表格与数值计算不受影响；导入持久生效，直到点「清除导入」。</li>
+              </ul>
+            </div>
+            <div class="settings-section help-section">
+              <h4>报告管理</h4>
+              <ul class="help-list">
+                <li>集中列出全部已生成报告（时间倒序），支持打开、文件夹定位、单个删除与「删除全部报告」；</li>
+                <li>删除仅移除报告文件，不影响测量数据、变体与已导入的润色文本。</li>
+              </ul>
+            </div>
+            <div class="settings-section help-section">
+              <h4>常见问题</h4>
+              <ul class="help-list">
+                <li><b>环境要求</b>：Windows + Microsoft Word 2016 及以上（生成报告依赖 Word 组件）；无需安装 Python；</li>
+                <li><b>生成失败</b>：查看生成日志中的缺失字段提示，多为必填数据未填全；</li>
+                <li><b>取消生成</b>：会安全结束本次启动的 Word 进程，不影响你手动打开的文档；</li>
+                <li><b>隐私</b>：学生信息、API Key、技能文件、润色导入文本均存储在本机应用数据目录，不进安装包升级路径之外的任何位置。</li>
+              </ul>
+            </div>
+          </div>
+          <!-- 请勿点击页（高危彩蛋入口） -->
+          <div class="settings-pane" id="paneDanger">
+            <div class="settings-section danger-section">
+              <h4 class="danger-title">⚠ 高危区域</h4>
+              <div class="form-hint danger-hint">此页面下的内容存在未知风险，开发者强烈不建议任何人点击。继续操作前请认真阅读每一条警告。</div>
+              <button class="btn btn-lg btn-danger btn-block" id="btnDangerGo" type="button">
+                ⚠ 请勿点击 ⚠
+              </button>
+            </div>
+          </div>
+          <!-- 检查更新页 -->
+          <div class="settings-pane" id="paneUpdate">
+            <div class="settings-section">
+              <h4>检查更新</h4>
+              <div class="form-hint">更新源为 Gitee Release（国内高速直连）。发布新版本后，在此检查即可发现并下载。</div>
+              <div class="form-group">
+                <label>当前版本</label>
+                <input type="text" id="inputCurrentVersion" disabled />
+              </div>
+              <div class="form-group">
+                <label>自定义更新清单地址（可选，留空使用 Gitee）</label>
+                <input type="text" id="inputManifestUrl" placeholder="https://你的域名/latest.json（需为公网地址）" />
+                <div class="model-hint form-hint">清单格式：{ "version": "1.2.0", "notes": "更新说明", "url": "安装包直链", "fileName": "Setup 1.2.0.exe" }</div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Gitee 用户名</label>
+                  <input type="text" id="inputGiteeOwner" placeholder="如 muhan-ad" />
+                </div>
+                <div class="form-group">
+                  <label>Gitee 仓库名</label>
+                  <input type="text" id="inputGiteeRepo" placeholder="如 labreport-writer" />
+                </div>
+              </div>
+              <div class="skill-actions">
+                <button class="btn btn-sm btn-primary" id="btnCheckUpdate" type="button">检查更新</button>
+              </div>
+              <div class="form-hint" id="updateResult">尚未检查</div>
             </div>
           </div>
         </div>
@@ -520,6 +599,45 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" id="btnCancelSettings">取消</button>
         <button class="btn btn-primary" id="btnSaveSettings">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更新提示弹窗 -->
+  <div class="modal-overlay" id="updateModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="updateModalTitle">发现新版本</h3>
+        <button class="modal-close" id="btnCloseUpdateModal">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="update-meta" id="updateMeta"></p>
+        <div class="update-notes" id="updateNotes"></div>
+        <div class="update-progress" id="updateProgressWrap" style="display:none">
+          <div class="progress-bar"><div class="progress-fill" id="updateProgressFill"></div></div>
+          <p class="update-progress-text" id="updateProgressText">准备下载…</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnUpdateLater">稍后再说</button>
+        <button class="btn btn-primary" id="btnUpdateDownload">立即下载</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 高危警告弹窗（多级确认） -->
+  <div class="modal-overlay" id="dangerModal">
+    <div class="modal modal-danger">
+      <div class="modal-header">
+        <h3 class="danger-title">⚠ 高危警告</h3>
+      </div>
+      <div class="modal-body danger-body">
+        <div class="danger-icon">⚠</div>
+        <p class="danger-msg" id="dangerMsg"></p>
+      </div>
+      <div class="modal-footer danger-footer" id="dangerBtns">
+        <button class="btn btn-ghost" id="btnDangerExit">退出该页面</button>
+        <button class="btn btn-danger" id="btnDangerProceed">继续</button>
       </div>
     </div>
   </div>
