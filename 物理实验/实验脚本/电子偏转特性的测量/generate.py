@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # 给定量（教材，预填入模板）
 D_VALS = [-16.0, -12.0, -8.0, -4.0, 0.0, 4.0, 8.0, 12.0, 16.0]  # 屏上偏转量 D/mm
@@ -149,6 +150,20 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_title("电子偏转特性的测量")
     doc.add_student_info()
 
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    r = {
+        "ex_1000": reg_x_1000.slope, "ex_800": reg_x_800.slope,
+        "ey_1000": reg_y_1000.slope, "ey_800": reg_y_800.slope,
+        "dm_1000": dm_1000, "dm_800": dm_800,
+    }
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
+
     doc.add_heading("一、原始数据记录", level=1)
     doc.add_paragraph("请在下方粘贴原始数据记录照片。")
 
@@ -242,6 +257,14 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_run(" 越大，磁偏转灵敏度与 ")
     doc.add_inline_math(r"\sqrt{U_{2}}")
     doc.add_run(" 成反比。")
+
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
 
     doc.add_heading("三、课后思考题", level=1)
     doc.add_paragraph("1. 由电偏转灵敏度的计算结果，能得出 ")

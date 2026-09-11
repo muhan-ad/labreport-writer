@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # ============================================================
 # 实验参数
@@ -322,6 +323,20 @@ def _generate_docx(data: dict, output_path: str) -> bool:
     doc.add_title("电子元件伏安特性的测量")
     doc.add_student_info()
 
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    r1_mean = round(sum(t1_r) / len(t1_r), 1) if t1_r else 0.0
+    r = {
+        "u1": u1, "u2": u2, "i1": i1, "i2": i2,
+        "n_disp": n_disp, "K_disp": K_disp, "r1_mean": r1_mean,
+    }
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
+
     # ---- 一、实验数据记录 ----
     doc.add_heading("一、实验数据记录", level=1)
     doc.add_paragraph("（请在此处粘贴原始数据记录照片。）")
@@ -384,6 +399,14 @@ def _generate_docx(data: dict, output_path: str) -> bool:
     ])
     doc.add_paragraph("由数据得到二极管的正向伏安特性曲线如下：")
     doc.add_image(plot_t3, width_cm=14)
+
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
 
     # ---- 三、课后思考题 ----
     doc.add_heading("三、课后思考题", level=1)

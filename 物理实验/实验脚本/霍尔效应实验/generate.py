@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # 给定量（教材/仪器标称，预填入模板）
 I_WORK_MA = 10.0    # 表1 固定工作电流 I/mA
@@ -146,6 +147,19 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_title("霍尔效应实验")
     doc.add_student_info()
 
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    r = {
+        "kh": kh, "i_work": i_work, "im_fixed": im_fixed,
+        "k": reg.slope, "r_coef": reg.r, "b2_mean": b2_mean,
+    }
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
+
     doc.add_heading("一、原始数据记录", level=1)
     doc.add_paragraph("请在下方粘贴原始数据记录照片。")
 
@@ -177,6 +191,14 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_paragraph("由图2 可见，改变工作电流 I 时磁感应强度 B 基本保持恒定（平均值 ")
     doc.add_inline_math(f"\\bar{{B}} = {b2_mean:.3f}" + r"\,\mathrm{T}")
     doc.add_run("），验证了磁感应强度与工作电流无关。")
+
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
 
     doc.add_heading("三、课后思考题", level=1)
     doc.add_paragraph("1. 若磁感应强度跟霍尔元件不完全正交，则按 B = U_H/(K_H·I) 计算出的"

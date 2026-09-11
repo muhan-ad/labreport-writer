@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # ============================================================
 # 实验参数
@@ -248,6 +249,19 @@ def _generate_docx(data: dict, output_path: str) -> bool:
     doc.add_title("理想气体状态方程")
     doc.add_student_info()
 
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    r = {
+        "R_exp": R_exp, "E": E, "k1": k1, "V0": V0, "n_mmol": n_mmol,
+        "k2": k2, "T_iso": T_iso, "p0": p0, "vp": vp,
+    }
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
+
     # ---- 一、实验数据记录 ----
     doc.add_heading("一、实验数据记录", level=1)
     doc.add_paragraph("（请在此处粘贴原始数据记录照片。）")
@@ -317,6 +331,14 @@ def _generate_docx(data: dict, output_path: str) -> bool:
     doc.add_paragraph("所以相对误差：")
     doc.add_math(r"E = \left|\frac{R - R_{\text{理论}}}{R_{\text{理论}}}\right| \times 100% \approx "
                  + f"{E:.1f}" + "%")
+
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
 
     # ---- 三、思考题 ----
     doc.add_heading("三、思考题", level=1)

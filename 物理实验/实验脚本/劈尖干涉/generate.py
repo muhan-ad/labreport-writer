@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # ── 物理常数 ──
 LAMBDA_NM = 589.3              # 钠光灯波长 (nm)
@@ -108,6 +109,20 @@ def _generate_docx(data: dict, output_path: str):
     # ════════════════════════════════
     doc.add_title("劈尖干涉测量细丝直径")
     doc.add_student_info()
+
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    r = {
+        "d_bar": d_bar, "u_d": u_d, "L": L, "l_bar_k": l_bar_k,
+        "s": s, "lambda_nm": LAMBDA_NM, "u_l": u_l,
+        "d_mm": d_bar, "u_d_mm": u_d, "lambda_mm": LAMBDA_MM,
+    }
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
 
     # ════════════════════════════════
     # 一、原始数据记录
@@ -265,6 +280,14 @@ def _generate_docx(data: dict, output_path: str):
         + r" \pm " + format_number(u_d / 10 ** d_power, u_d / 10 ** d_power)
         + r") \times 10^{" + f"{d_power}" + r"}\,\mathrm{mm}"
     )
+
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
 
     # ════════════════════════════════
     # 三、课后思考题

@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # ============================================================
 # 物理常数 / 实验参数（按教材）
@@ -304,6 +305,15 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_title("衍射光强分布的测量")
     doc.add_student_info()
 
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
+
     # ---- 一、原始数据记录 ----
     doc.add_heading("一、原始数据记录", level=1)
     doc.add_paragraph("（请在此处粘贴原始数据记录照片。）")
@@ -419,6 +429,14 @@ def _generate_docx(data: dict, output_path: str):
         "结果在合理误差范围内，实验测量较为准确。"
         "误差主要来源于：探测器定位精度、背景光影响、"
         "单缝与探测器间距 L 的测量误差、激光光斑的非理想均匀性等。")
+
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
 
     # ---- 三、课后思考题 ----
     doc.add_heading("三、课后思考题", level=1)

@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT_DIR))
 from common import *
 from common.docx_report import DocxReportWriter
 from common.data_io import load_data
+from common.variants import compose
 
 # ═══════════════════════════════════════════════════════════
 # 物理常数
@@ -233,6 +234,20 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_title("直螺线管磁场分布的测量")
     doc.add_student_info()
 
+    # 变体组合：实验原理 / 实验方法（有 variants.json 且应用传入选择时生效）
+    r = {
+        "B_exp_center": B_exp_center, "B0_theory": B0_theory,
+        "E_rel": E_rel, "RKb_mean": RKb_mean, "M_H": M_H,
+        "dm_cm_center": dm_cm_center, "dm_mm_center": dm_mm_center,
+    }
+    variants = compose(SCRIPT_DIR, r)
+    if "实验原理" in variants:
+        doc.add_heading("实验原理", level=1)
+        doc.add_paragraph_rich(variants["实验原理"])
+    if "实验方法" in variants:
+        doc.add_heading("实验方法", level=1)
+        doc.add_paragraph_rich(variants["实验方法"])
+
     # ── 一、原始数据记录 ──
     doc.add_heading("一、原始数据记录", level=1)
     doc.add_paragraph("请在下方粘贴原始数据记录照片。")
@@ -397,6 +412,14 @@ def _generate_docx(data: dict, output_path: str):
     doc.add_table(cmp_headers, cmp_rows, col_widths=[3.5, 3.5, 3.5, 3.5])
 
     # ── 三、课后思考题 ──
+    # 变体组合：误差分析 / 结论
+    if "误差分析" in variants:
+        doc.add_heading("误差分析", level=1)
+        doc.add_paragraph_rich(variants["误差分析"])
+    if "结论" in variants:
+        doc.add_heading("结论", level=1)
+        doc.add_paragraph_rich(variants["结论"])
+
     doc.add_heading("三、课后思考题", level=1)
 
     doc.add_heading("1. 实验中，对探测线圈有何要求？依据是什么？", level=2)
