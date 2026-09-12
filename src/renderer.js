@@ -145,7 +145,8 @@ function isDevMode() {
 // 应用开发者模式 UI：开关切换时 / 启动时调用
 function applyDevUi() {
   const dev = isDevMode();
-  const devEls = ['btnBatch', 'btnQueuePanel', 'btnSelectAll', 'btnOpenData', 'btnOpenData2'];
+  // dataFileInfo（data.json 文件名/路径/外部打开）、批量入口与自建变体导入仅开发者模式可见
+  const devEls = ['btnBatch', 'btnQueuePanel', 'btnSelectAll', 'btnOpenData', 'btnOpenData2', 'dataFileInfo', 'btnImportCustomVariants'];
   devEls.forEach(id => {
     const el = $(id);
     if (el) el.style.display = dev ? '' : 'none';
@@ -163,7 +164,9 @@ function setDevMode(on) {
 }
 
 function loadDevelopPane() {
-  $('chkDevelopMode').checked = isDevMode();
+  const dev = isDevMode();
+  $('rdDevMode').checked = dev;
+  $('rdNormalMode').checked = !dev;
 }
 
 // ── 分类计数 ──
@@ -194,9 +197,12 @@ function renderList(keyword = '') {
   $('listTitle').textContent = CATEGORY_NAMES[currentCategory];
   $('listCount').textContent = filtered.length;
 
-  // 按分类排序
+  // 排序：有自建变体的实验优先置顶 → 分类顺序 → 名称
   const catOrder = { mechanics: 0, optics: 1, electromagnetism: 2, other: 3 };
   filtered.sort((a, b) => {
+    const ca = a.hasCustomVariants ? 1 : 0;
+    const cb = b.hasCustomVariants ? 1 : 0;
+    if (ca !== cb) return cb - ca;
     if (a.category !== b.category) return catOrder[a.category] - catOrder[b.category];
     return a.name.localeCompare(b.name, 'zh');
   });
@@ -211,9 +217,10 @@ function renderList(keyword = '') {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
       </div>`
       : '';
+    const badgeHtml = exp.hasCustomVariants ? '<span class="exp-badge-custom">自建</span>' : '';
     li.innerHTML = checkboxHtml + `
       <span class="exp-dot ${exp.hasReport ? 'done' : ''}"></span>
-      <span class="exp-name">${getDisplayName(exp)}</span>
+      <span class="exp-name">${getDisplayName(exp)}${badgeHtml}</span>
       <span class="exp-cat">${CATEGORY_NAMES[exp.category].slice(0, 2)}</span>
     `;
     // checkbox 点击只切换选中，不打开详情（开发者模式才有）
@@ -563,23 +570,29 @@ function clearFormData() {
   showToast('info', '已清除', '全部字段已置空，填写后请点击「保存修改」');
 }
 
-// 填入默认数据：整表重置为 schema 默认值（需二次确认，防止覆盖已填数据）
-function fillDefaultData() {
+// 填入默认数据：整表恢复为实验内置的测试数据（sample.json 快照；缺失时回退 schema 默认值），需二次确认
+async function fillDefaultData() {
   if (!currentSchema || !currentExp) return;
-  if (!confirm('将当前实验表单整表重置为默认数据？\n您已填写的字段将被默认值覆盖！')) return;
-  if (!confirm('最后确认：重置后当前填写内容将丢失，确定继续？')) return;
+  if (!confirm('将当前实验表单整表恢复为实验内置的测试数据？\n您已填写的字段将被测试数据覆盖！')) return;
+  if (!confirm('最后确认：恢复后当前填写内容将丢失，确定继续？')) return;
+  let sample = null;
+  try {
+    const r = await window.labAPI.readSampleData(currentExp.path);
+    if (r.ok && r.data) sample = r.data;
+  } catch (e) { /* 读取失败时回退 schema 默认值 */ }
   for (const group of (currentSchema.groups || [])) {
     for (const fld of (group.fields || [])) {
+      const hasSample = sample && sample[fld.key] !== undefined;
       if (fld.type === 'array') {
-        currentData[fld.key] = Array.isArray(fld.default)
-          ? fld.default.slice()
-          : new Array(fld.length || 0).fill(null);
+        currentData[fld.key] = hasSample
+          ? sample[fld.key].slice()
+          : (Array.isArray(fld.default) ? fld.default.slice() : new Array(fld.length || 0).fill(null));
       } else if (fld.type === 'matrix') {
-        currentData[fld.key] = Array.isArray(fld.default)
-          ? fld.default.map(r => r.slice())
-          : Array.from({ length: fld.rows || 0 }, () => new Array(fld.cols || 0).fill(null));
+        currentData[fld.key] = hasSample
+          ? sample[fld.key].map(r => r.slice())
+          : (Array.isArray(fld.default) ? fld.default.map(r => r.slice()) : Array.from({ length: fld.rows || 0 }, () => new Array(fld.cols || 0).fill(null)));
       } else {
-        currentData[fld.key] = fld.default !== undefined ? fld.default : null;
+        currentData[fld.key] = hasSample ? sample[fld.key] : (fld.default !== undefined ? fld.default : null);
       }
     }
   }
@@ -588,7 +601,7 @@ function fillDefaultData() {
   notifyDataModified();
   $('btnSaveData').disabled = false;
   refreshFormCheck();
-  showToast('success', '已填入', '全表已恢复为默认数据，点击「保存修改」后生效');
+  showToast('success', '已填入', '全表已恢复为测试数据，点击「保存修改」后生效');
 }
 
 function renderForm() {
@@ -625,9 +638,9 @@ function renderField(fld) {
       + unit + `</div>`;
   }
   if (fld.type === 'science') {
-    // 科学计数法双框：尾数 × 10^指数（指数可自由输入，附预设建议，默认 expDefault）
+    // 科学计数法双框：尾数 × 10^指数（指数可自由输入，附预设建议；清除后指数框保持空白）
     let mantissa = '';
-    let exp = fld.expDefault !== undefined ? fld.expDefault : -9;
+    let exp = '';
     if (hasVal(val)) {
       const num = Number(val);
       if (isFinite(num) && num !== 0) {
@@ -711,7 +724,8 @@ function readFormData() {
         const m = document.querySelector(`input.science-mantissa[data-key="${key}"]`);
         const e = document.querySelector(`input.science-exp[data-key="${key}"]`);
         const mv = (m && m.value !== '') ? parseFloat(m.value) : NaN;
-        const ev = (e && e.value !== '') ? parseInt(e.value, 10) : 0;
+        // 指数留空时回退 schema 的默认指数（清除/重填后只填尾数也能合成正确量级）
+        const ev = (e && e.value !== '') ? parseInt(e.value, 10) : (fld.expDefault !== undefined ? fld.expDefault : -9);
         data[key] = (isFinite(mv) && isFinite(ev)) ? mv * Math.pow(10, ev) : null;
       } else if (fld.type === 'array') {
         const inputs = document.querySelectorAll(`input[data-key="${key}"][data-idx]`);
@@ -788,11 +802,6 @@ function notifyDataModified() {
 async function saveExcelData() {
   if (currentSchema) return saveFormData();  // 方式三：统一走表单保存
   return false;
-}
-
-async function reloadExcelData() {
-  if (isDataModified && !confirm('有未保存的修改，确定重新加载吗？')) return;
-  await loadExperimentData(currentExp);
 }
 
 // ── 报告预览 ──
@@ -1020,6 +1029,157 @@ async function importSkillFiles() {
     await loadSkillList();
   }
   if (r.errors && r.errors.length) showToast('warning', '部分导入失败', r.errors.join('；'), 6000);
+}
+
+// ── 自建变体库（设置页：归档查看 / 删除 / 恢复 / 导出 / 批量导入）──
+const CUSTOM_SECTION_ORDER = ['实验原理', '实验方法', '误差分析', '结论', '实验结论'];
+let customVariantsCache = [];     // [{expId, sections:{章节:数量}, count}]
+let customVariantsSelId = null;   // 当前展开详情的实验 id
+let customVariantsDetail = null;  // {章节: [文本]}
+
+async function loadCustomVariantsPane() {
+  await loadCustomVariantsList();
+}
+
+async function loadCustomVariantsList() {
+  const r = await window.labAPI.listCustomVariants();
+  customVariantsCache = (r && r.ok) ? (r.list || []) : [];
+  if (customVariantsSelId && !customVariantsCache.some(x => x.expId === customVariantsSelId)) {
+    customVariantsSelId = null;
+    customVariantsDetail = null;
+  }
+  renderCustomVariantList();
+  renderCustomVariantDetail();
+}
+
+function renderCustomVariantList() {
+  const el = $('customVariantExpList');
+  if (!customVariantsCache.length) {
+    el.innerHTML = '<div class="skill-empty">暂无自建变体 —— 用 AI 生成新变体时勾选「同时存入自建变体库」即可在此查看。</div>';
+    return;
+  }
+  el.innerHTML = '';
+  for (const item of customVariantsCache) {
+    const row = document.createElement('div');
+    const isSel = item.expId === customVariantsSelId;
+    row.className = 'cv-exp-row' + (isSel ? ' active' : '');
+    const badges = CUSTOM_SECTION_ORDER
+      .filter(s => item.sections[s])
+      .map(s => `${s}×${item.sections[s]}`)
+      .join('　');
+    row.innerHTML = `<span class="cv-exp-name">${escapeHtml(item.expId)}</span><span class="cv-exp-badges">${escapeHtml(badges)}</span>`;
+    row.onclick = () => openCustomVariantDetail(item.expId);
+    el.appendChild(row);
+  }
+}
+
+async function openCustomVariantDetail(expId) {
+  customVariantsSelId = expId;
+  const r = await window.labAPI.readCustomVariants(expId);
+  customVariantsDetail = (r && r.ok && r.data) ? r.data : null;
+  renderCustomVariantList();
+  renderCustomVariantDetail();
+}
+
+function renderCustomVariantDetail() {
+  const el = $('customVariantDetail');
+  if (!customVariantsSelId || !customVariantsDetail) {
+    el.innerHTML = customVariantsCache.length
+      ? '<div class="cv-detail-empty">点击上方实验查看各章节的自建变体</div>'
+      : '';
+    return;
+  }
+  const sections = CUSTOM_SECTION_ORDER.filter(s => Array.isArray(customVariantsDetail[s]) && customVariantsDetail[s].length);
+  if (!sections.length) {
+    el.innerHTML = '<div class="cv-detail-empty">该实验暂无自建变体</div>';
+    return;
+  }
+  let html = '';
+  for (const s of sections) {
+    html += `<div class="cv-detail-section"><div class="cv-detail-title"><span>${escapeHtml(s)}</span></div>`;
+    customVariantsDetail[s].forEach((text, idx) => {
+      html += `<div class="cv-item"><span class="cv-item-text" title="${escapeHtml(String(text).slice(0, 300))}">${escapeHtml(String(text).slice(0, 60))}</span>`
+        + `<span class="cv-item-actions">`
+        + `<button class="btn btn-xs btn-outline cv-restore" data-section="${escapeHtml(s)}" data-idx="${idx}">恢复到实验</button>`
+        + `<button class="btn btn-xs btn-outline cv-del" data-section="${escapeHtml(s)}" data-idx="${idx}">删除</button>`
+        + `</span></div>`;
+    });
+    html += '</div>';
+  }
+  el.innerHTML = html;
+  el.querySelectorAll('.cv-del').forEach(b => {
+    b.onclick = () => deleteCustomVariantOne(b.dataset.section, parseInt(b.dataset.idx, 10));
+  });
+  el.querySelectorAll('.cv-restore').forEach(b => {
+    b.onclick = () => restoreVariantToExperiment(b.dataset.section, parseInt(b.dataset.idx, 10));
+  });
+}
+
+// 自建库变更后：刷新设置列表 + 主界面实验列表（排序/徽章）
+async function refreshAfterCustomVariantChange() {
+  await loadCustomVariantsList();
+  try {
+    experiments = await window.labAPI.scanExperiments();
+    experiments.forEach(e => { e.category = getCategory(e.name); });
+    renderList();
+    updateCategoryCounts();
+    updateEmptyStats();
+  } catch (e) { /* 扫描失败不阻塞 */ }
+}
+
+async function deleteCustomVariantOne(section, index) {
+  if (!customVariantsSelId) return;
+  const arr = (customVariantsDetail && customVariantsDetail[section]) || [];
+  const preview = typeof arr[index] === 'string' ? arr[index].slice(0, 30) : '';
+  if (!confirm(`删除「${section}」中的这条自建变体？\n${preview}…`)) return;
+  const r = await window.labAPI.deleteCustomVariant(customVariantsSelId, section, index);
+  if (!r.ok) { showToast('error', '删除失败', r.error, 5000); return; }
+  showToast('success', '已删除', '自建变体条目已移除');
+  await refreshAfterCustomVariantChange();
+}
+
+async function restoreVariantToExperiment(section, index) {
+  if (!customVariantsSelId) return;
+  const arr = (customVariantsDetail && customVariantsDetail[section]) || [];
+  const text = arr[index];
+  if (typeof text !== 'string' || !text) { showToast('error', '内容无效', '该条目内容为空'); return; }
+  const target = experiments.find(e => e.id === customVariantsSelId);
+  if (!target) { showToast('error', '未找到实验', '该实验可能已被移除'); return; }
+  if (!confirm(`把「${section}」的这条自建变体追加到实验「${customVariantsSelId}」的变体列表？\n恢复后可在该实验的变体下拉中选用。`)) return;
+  const lr = await window.labAPI.loadVariants(target.path);
+  const variants = (lr && lr.ok && lr.variants) ? lr.variants : {};
+  const cur = Array.isArray(variants[section]) ? variants[section] : [];
+  if (!cur.includes(text)) cur.push(text);
+  variants[section] = cur;
+  const sr = await window.labAPI.saveVariants(target.path, variants);
+  if (!sr.ok) { showToast('error', '恢复失败', sr.error, 5000); return; }
+  showToast('success', '已恢复', `已追加到「${section}」变体列表，可在变体下拉选用`);
+  if (currentExp && currentExp.id === customVariantsSelId) loadVariantsUI(currentExp);
+}
+
+async function exportCustomVariantsOne() {
+  if (!customVariantsSelId) { showToast('error', '未选择实验', '请先在列表中选择一个实验'); return; }
+  const r = await window.labAPI.exportCustomVariants({ expId: customVariantsSelId });
+  if (!r.ok) { showToast('error', '导出失败', r.error, 5000); return; }
+  if (r.canceled) return;
+  showToast('success', '已导出', `自建变体_${customVariantsSelId}.json`);
+}
+
+async function exportAllCustomVariants() {
+  const r = await window.labAPI.exportCustomVariants({ exportAll: true });
+  if (!r.ok) { showToast('error', '导出失败', r.error, 5000); return; }
+  if (r.canceled) return;
+  if (r.errors && r.errors.length) showToast('warning', '部分导出失败', r.errors.join('；'), 6000);
+  else showToast('success', '已导出', `共导出 ${r.count} 个实验的自建变体`);
+}
+
+async function importCustomVariantsFiles() {
+  const r = await window.labAPI.importCustomVariants();
+  if (!r.ok) { showToast('error', '导入失败', r.error, 5000); return; }
+  if (!r.imported.length && !r.errors.length) return;   // 取消选择
+  if (r.imported.length) showToast('success', '已导入', r.imported.join('、'));
+  if (r.errors.length) showToast('warning', '导入完成（部分失败）', r.errors.join('；'), 6000);
+  await refreshAfterCustomVariantChange();
 }
 
 async function runAiPolish() {
@@ -1403,13 +1563,15 @@ function bindEvents() {
   $('btnSettings').onclick = () => { openModal('settingsModal'); loadSettingsForm(); switchSettingsPane('ai'); };
   $('btnNavAi').onclick = () => switchSettingsPane('ai');
   $('btnNavSkills').onclick = () => { switchSettingsPane('skills'); loadSkillList(); };
+  $('btnNavCustomVariants').onclick = () => { switchSettingsPane('customvariants'); loadCustomVariantsPane(); };
   $('btnNavReports').onclick = () => { switchSettingsPane('reports'); loadReportsList(); };
   $('btnRefreshReports').onclick = loadReportsList;
   $('btnNavHelp').onclick = () => switchSettingsPane('help');
   $('btnNavDanger').onclick = () => switchSettingsPane('danger');
   $('btnNavUpdate').onclick = () => { switchSettingsPane('update'); loadUpdatePane(); };
   $('btnNavDevelop').onclick = () => { switchSettingsPane('develop'); loadDevelopPane(); };
-  $('chkDevelopMode').onchange = (e) => setDevMode(e.target.checked);
+  $('rdDevMode').onclick = () => setDevMode(true);
+  $('rdNormalMode').onclick = () => setDevMode(false);
   $('btnFillDefaultData').onclick = fillDefaultData;
   $('btnCheckUpdate').onclick = checkForUpdate;
   $('btnCheckDataUpdate').onclick = checkDataUpdate;
@@ -1482,7 +1644,6 @@ function bindEvents() {
 
   // 数据录入
   $('btnSaveData').onclick = saveExcelData;
-  $('btnReloadData').onclick = reloadExcelData;
   $('btnClearFormData').onclick = clearFormData;
 
   // 报告预览
@@ -1506,6 +1667,9 @@ function bindEvents() {
   };
   $('btnImportSkill').onclick = importSkillFiles;
   $('btnOpenSkillsFolder').onclick = () => window.labAPI.openSkillsFolder();
+  $('btnExportCustomVariant').onclick = exportCustomVariantsOne;
+  $('btnExportAllCustomVariants').onclick = exportAllCustomVariants;
+  $('btnImportCustomVariants').onclick = importCustomVariantsFiles;
   // 润色面板初始状态（实验相关部分由 selectExperiment 刷新）
   $('chkKbOnly').checked = loadSettings().kbOnly !== false;
   loadSkillList();
@@ -1550,6 +1714,8 @@ function switchSettingsPane(name) {
   $('paneAi').classList.toggle('active', name === 'ai');
   $('btnNavSkills').classList.toggle('active', name === 'skills');
   $('paneSkills').classList.toggle('active', name === 'skills');
+  $('btnNavCustomVariants').classList.toggle('active', name === 'customvariants');
+  $('paneCustomVariants').classList.toggle('active', name === 'customvariants');
   $('btnNavReports').classList.toggle('active', name === 'reports');
   $('paneReports').classList.toggle('active', name === 'reports');
   $('btnNavHelp').classList.toggle('active', name === 'help');
@@ -1581,7 +1747,7 @@ async function loadDataInfo() {
   try {
     const r = await window.labAPI.getDataInfo();
     if (r.ok) {
-      el.textContent = r.localVersion ? ('v' + r.localVersion) : ('v' + r.builtinVersion + '（内置）');
+      el.textContent = r.localVersion || r.builtinVersion || '1.0.0';
     } else {
       el.textContent = '未知';
     }
@@ -1590,44 +1756,42 @@ async function loadDataInfo() {
 
 async function checkDataUpdate() {
   const btn = $('btnCheckDataUpdate');
-  const result = $('dataUpdateResult');
   btn.disabled = true;
   btn.textContent = '检查中…';
-  result.textContent = '正在连接更新服务器…';
   try {
     const r = await window.labAPI.checkDataUpdate();
     if (!r.ok) {
-      result.textContent = '检查失败：' + r.error;
+      showToast('error', '检查失败', r.error, 5000);
       return;
     }
     if (!r.hasUpdate) {
-      result.textContent = '实验数据已是最新（v' + r.localVersion + '）';
+      showToast('success', '已是最新', `实验数据已是最新（v${r.localVersion}）`, 3000);
       return;
     }
     const ok = confirm(
       `发现实验数据新版本 v${r.remoteVersion}（当前 v${r.localVersion}）\n\n${r.notes || '（无更新说明）'}\n\n是否立即下载并更新？\n更新不会覆盖您已填写的测量数据。`
     );
     if (!ok) {
-      result.textContent = `已取消（新版本 v${r.remoteVersion} 待更新）`;
+      showToast('info', '已取消', `新版本 v${r.remoteVersion} 待更新`, 3000);
       return;
     }
-    result.textContent = '正在下载数据包…';
+    btn.textContent = '下载中…';
     window.labAPI.onDataProgress(({ percent }) => {
-      result.textContent = `正在下载数据包 ${percent}%`;
+      btn.textContent = `下载中 ${percent}%`;
     });
     const dl = await window.labAPI.downloadDataPackage({ url: r.url });
     if (!dl.ok) {
-      result.textContent = '下载失败：' + dl.error;
+      showToast('error', '下载失败', dl.error, 5000);
       return;
     }
-    result.textContent = '正在应用更新…';
+    btn.textContent = '正在应用…';
     const ap = await window.labAPI.applyDataPackage({
       filePath: dl.filePath,
       version: r.remoteVersion,
       notes: r.notes,
     });
     if (!ap.ok) {
-      result.textContent = '更新失败：' + ap.error;
+      showToast('error', '更新失败', ap.error, 5000);
       return;
     }
     if (ap.warnings && ap.warnings.length) {
@@ -1635,7 +1799,6 @@ async function checkDataUpdate() {
     } else {
       showToast('success', '数据更新完成', `实验数据已更新到 v${r.remoteVersion}`, 4000);
     }
-    result.textContent = `已更新到 v${r.remoteVersion}`;
     // 重新扫描实验（热更新后的实验列表与资源入口）
     experiments = await window.labAPI.scanExperiments();
     experiments.forEach(e => { e.category = getCategory(e.name); });
@@ -1644,7 +1807,7 @@ async function checkDataUpdate() {
     updateEmptyStats();
     loadDataInfo();
   } catch (err) {
-    result.textContent = '检查失败：' + err.message;
+    showToast('error', '检查失败', err.message, 5000);
   } finally {
     btn.disabled = false;
     btn.textContent = '检查实验数据更新';
@@ -1970,15 +2133,15 @@ function autoFillApiUrl() {
 
 // ── 保存设置 ──
 function saveAppSettings() {
-  const settings = {
-    provider: $('selectProvider').value,
-    apiKey: $('inputApiKey').value.trim(),
-    model: $('inputModel').value.trim(),
-    apiUrl: $('inputApiUrl').value.trim(),
-    aiPolish: $('chkAiPolish').checked,
-    kbOnly: $('chkKbOnly').checked,
-    skillStates: getSkillStates(),
-  };
+  // 在现有设置基础上更新（保留 developerMode 等非本表单字段，避免保存时把开发者模式重置）
+  const settings = loadSettings();
+  settings.provider = $('selectProvider').value;
+  settings.apiKey = $('inputApiKey').value.trim();
+  settings.model = $('inputModel').value.trim();
+  settings.apiUrl = $('inputApiUrl').value.trim();
+  settings.aiPolish = $('chkAiPolish').checked;
+  settings.kbOnly = $('chkKbOnly').checked;
+  settings.skillStates = getSkillStates();
   saveSettings(settings);
   closeModal('settingsModal');
   showToast('success', '已保存', '设置已更新');
@@ -2233,6 +2396,7 @@ function openVariantAI(section) {
   $('variantAIInstruction').value = '';
   $('variantAIOriginal').value = texts[idx];
   $('variantAIResult').value = '';
+  $('chkArchiveVariant').checked = true;   // 每次打开默认勾选「同时存入自建变体库」
   openModal('variantAIModal');
 }
 
@@ -2286,13 +2450,20 @@ async function saveVariantAI() {
   if (!currentVariants[aiVariantSection]) currentVariants[aiVariantSection] = [];
   currentVariants[aiVariantSection].push(newText);
   const res = await window.labAPI.saveVariants(currentExp.path, currentVariants);
-  if (res.ok) {
-    renderVariantsPanel();
-    closeModal('variantAIModal');
-    const n = currentVariants[aiVariantSection].length;
-    showToast('success', '已保存', `已为"${aiVariantSection}"新增变体 ${n}`);
-  } else {
-    showToast('error', '保存失败', res.error, 5000);
+  if (!res.ok) { showToast('error', '保存失败', res.error, 5000); return; }
+  renderVariantsPanel();
+  closeModal('variantAIModal');
+  const n = currentVariants[aiVariantSection].length;
+  showToast('success', '已保存', `已为"${aiVariantSection}"新增变体 ${n}`);
+  // 勾选「同时存入自建变体库」时归档（失败只提示，不影响已保存到实验的变体）
+  if ($('chkArchiveVariant').checked && currentExp) {
+    const ar = await window.labAPI.saveCustomVariant(currentExp.id, aiVariantSection, newText);
+    if (ar.ok) {
+      showToast('info', '已归档', '该变体已存入自建变体库');
+      await refreshAfterCustomVariantChange();
+    } else {
+      showToast('warning', '归档失败', ar.error, 5000);
+    }
   }
 }
 

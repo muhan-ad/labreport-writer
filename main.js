@@ -192,6 +192,40 @@ app.on('window-all-closed', () => {
 
 // ── 实验数据目录（热更新支持）──
 // 数据包下载解压到 userData，扫描时 userData 有有效清单则优先于安装目录（同名实验以 userData 为准）
+// ── 用户自建变体库（userData/自建变体/<实验名>.json，结构与 variants.json 同构）──
+function getCustomVariantsDir() {
+  const dir = path.join(app.getPath('userData'), '自建变体');
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* 忽略 */ }
+  return dir;
+}
+
+// 自建变体库认可的标准章节名（"实验结论"兼容 26 个实验中的键名差异）
+const CUSTOM_SECTION_NAMES = ['实验原理', '实验方法', '误差分析', '结论', '实验结论'];
+
+// 实验名 → 自建库文件绝对路径；非法名返回 null
+function customVariantPathFor(expId) {
+  const name = String(expId || '').replace(/[\\/:*?"<>|\r\n]+/g, '_').trim();
+  if (!name || name === '.' || name === '..') return null;
+  return path.join(getCustomVariantsDir(), name + '.json');
+}
+
+function readCustomVariantsFile(expId) {
+  const p = customVariantPathFor(expId);
+  if (!p || !fs.existsSync(p)) return null;
+  try {
+    const v = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    return (v && typeof v === 'object') ? v : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function hasCustomVariantsFor(expId) {
+  const v = readCustomVariantsFile(expId);
+  if (!v) return false;
+  return CUSTOM_SECTION_NAMES.some(s => Array.isArray(v[s]) && v[s].length > 0);
+}
+
 function getDataRoots() {
   const udRoot = path.join(app.getPath('userData'), '实验数据', '实验脚本');
   const mfPath = path.join(app.getPath('userData'), '实验数据', 'data-manifest.json');
@@ -224,6 +258,7 @@ function scanDirEntry(d, source) {
       : (hasSchemaJson ? path.join(expPath, 'schema.json') : null),
     reportFile: docx ? path.join(expPath, docx) : null,
     source,
+    hasCustomVariants: hasCustomVariantsFor(d.name),
   };
 }
 
@@ -260,6 +295,17 @@ ipcMain.handle('read-schema', (_, expPath) => {
     const p = path.join(expPath, 'schema.json');
     if (!fs.existsSync(p)) return { ok: true, schema: null };
     return { ok: true, schema: JSON.parse(fs.readFileSync(p, 'utf-8')) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// ── IPC: 读取 sample.json（内置测试数据快照，供「填入默认数据」恢复）──
+ipcMain.handle('read-sample-data', (_, expPath) => {
+  try {
+    const p = path.join(expPath, 'sample.json');
+    if (!fs.existsSync(p)) return { ok: true, data: null };
+    return { ok: true, data: JSON.parse(fs.readFileSync(p, 'utf-8')) };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -394,6 +440,208 @@ ipcMain.handle('delete-skill', (_, id) => {
   }
 });
 
+// ═══════════════════════════════════════════════
+// 用户自建变体库（userData/自建变体，独立于实验目录与数据热更新）
+// ═══════════════════════════════════════════════
+
+// 列出所有有自建变体的实验
+ipcMain.handle('list-custom-variants', () => {
+  try {
+    const dir = getCustomVariantsDir();
+    const out = [];
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.json')) continue;
+      const expId = f.slice(0, -5);
+      const v = readCustomVariantsFile(expId);
+      if (!v) continue;
+      const sections = {};
+      let count = 0;
+      for (const s of CUSTOM_SECTION_NAMES) {
+        if (Array.isArray(v[s]) && v[s].length) {
+          sections[s] = v[s].length;
+          count += v[s].length;
+        }
+      }
+      if (count > 0) out.push({ expId, sections, count });
+    }
+    out.sort((a, b) => a.expId.localeCompare(b.expId, 'zh'));
+    return { ok: true, list: out };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 读取某实验的自建变体（结构与 variants.json 同构）
+ipcMain.handle('read-custom-variants', (_, expId) => {
+  try {
+    const v = readCustomVariantsFile(expId);
+    return { ok: true, data: v };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 新增一条自建变体（同文本去重）
+ipcMain.handle('save-custom-variant', (_, expId, section, text) => {
+  try {
+    if (!CUSTOM_SECTION_NAMES.includes(section)) return { ok: false, error: '无效的章节名' };
+    if (typeof text !== 'string' || !text.trim()) return { ok: false, error: '变体文本为空' };
+    const p = customVariantPathFor(expId);
+    if (!p) return { ok: false, error: '无效的实验名' };
+    const v = readCustomVariantsFile(expId) || {};
+    const arr = Array.isArray(v[section]) ? v[section] : [];
+    if (!arr.includes(text)) arr.push(text);
+    v[section] = arr;
+    fs.writeFileSync(p, JSON.stringify(v, null, 1), 'utf-8');
+    return { ok: true, total: arr.length };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 删除一条自建变体；章节清空删键、文件清空删除
+ipcMain.handle('delete-custom-variant', (_, expId, section, index) => {
+  try {
+    if (!CUSTOM_SECTION_NAMES.includes(section)) return { ok: false, error: '无效的章节名' };
+    const p = customVariantPathFor(expId);
+    if (!p) return { ok: false, error: '无效的实验名' };
+    const v = readCustomVariantsFile(expId);
+    if (!v) return { ok: true };
+    const arr = Array.isArray(v[section]) ? v[section] : [];
+    if (typeof index !== 'number' || index < 0 || index >= arr.length) {
+      return { ok: false, error: '无效的变体序号' };
+    }
+    arr.splice(index, 1);
+    if (arr.length) v[section] = arr; else delete v[section];
+    const anyLeft = Object.values(v).some(a => Array.isArray(a) && a.length);
+    if (anyLeft) fs.writeFileSync(p, JSON.stringify(v, null, 1), 'utf-8');
+    else if (fs.existsSync(p)) fs.unlinkSync(p);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 导出：单实验（save 对话框）或全部（选文件夹逐实验写 自建变体_<实验名>.json）
+ipcMain.handle('export-custom-variants', async (_, payload) => {
+  try {
+    const exportAll = !!(payload && payload.exportAll);
+    const dir = getCustomVariantsDir();
+    let targetIds = [];
+    if (exportAll) {
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith('.json')) continue;
+        const expId = f.slice(0, -5);
+        if (hasCustomVariantsFor(expId)) targetIds.push(expId);
+      }
+    } else {
+      const one = String((payload && payload.expId) || '');
+      if (one && hasCustomVariantsFor(one)) targetIds = [one];
+    }
+    if (!targetIds.length) {
+      return { ok: false, error: exportAll ? '自建变体库为空' : '该实验没有自建变体' };
+    }
+    if (exportAll) {
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: '选择存放自建变体的文件夹',
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (canceled || !filePaths || !filePaths.length) return { ok: true, canceled: true, count: 0 };
+      const destDir = filePaths[0];
+      let n = 0;
+      const errors = [];
+      for (const eid of targetIds) {
+        try {
+          fs.copyFileSync(path.join(dir, eid + '.json'), path.join(destDir, '自建变体_' + eid + '.json'));
+          n += 1;
+        } catch (e) {
+          errors.push(eid + ': ' + e.message);
+        }
+      }
+      return { ok: true, canceled: false, count: n, errors };
+    }
+    const expId = targetIds[0];
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: '导出自建变体',
+      defaultPath: path.join(app.getPath('documents'), '自建变体_' + expId + '.json'),
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }],
+    });
+    if (canceled || !filePath) return { ok: true, canceled: true };
+    const v = readCustomVariantsFile(expId);
+    if (!v) return { ok: false, error: '读取自建变体失败' };
+    fs.writeFileSync(filePath, JSON.stringify(v, null, 1), 'utf-8');
+    return { ok: true, canceled: false, count: 1 };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 导入（批量）：多选 .json，文件名取实验名（前导「自建变体_」自动剥离），结构校验后合并去重
+ipcMain.handle('import-custom-variants', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: '导入自建变体文件（可多选批量导入）',
+      filters: [{ name: '自建变体 JSON', extensions: ['json'] }],
+      properties: ['openFile', 'multiSelection'],
+    });
+    if (canceled || !filePaths || !filePaths.length) return { ok: true, imported: [], errors: [] };
+    // 已安装的全部实验名（内置 + userData 双根）
+    const known = new Set();
+    const { roots } = getDataRoots();
+    for (const r of roots) {
+      try {
+        for (const dEntry of fs.readdirSync(r.dir, { withFileTypes: true })) {
+          if (dEntry.isDirectory() && dEntry.name !== 'common' && !dEntry.name.startsWith('.')) known.add(dEntry.name);
+        }
+      } catch (e) { /* 忽略 */ }
+    }
+    const imported = [];
+    const errors = [];
+    for (const src of filePaths) {
+      try {
+        let expId = path.basename(src, path.extname(src));
+        if (expId.startsWith('自建变体_')) expId = expId.slice('自建变体_'.length);
+        if (!known.has(expId)) {
+          errors.push(path.basename(src) + ': 未找到匹配实验「' + expId + '」');
+          continue;
+        }
+        const v = JSON.parse(fs.readFileSync(src, 'utf-8'));
+        if (!v || typeof v !== 'object') {
+          errors.push(path.basename(src) + ': 文件结构无效');
+          continue;
+        }
+        const existing = readCustomVariantsFile(expId) || {};
+        let added = 0;
+        for (const [section, texts] of Object.entries(v)) {
+          if (!CUSTOM_SECTION_NAMES.includes(section)) continue;
+          if (!Array.isArray(texts)) continue;
+          const arr = Array.isArray(existing[section]) ? existing[section] : [];
+          for (const t of texts) {
+            if (typeof t === 'string' && t.trim() && !arr.includes(t)) { arr.push(t); added += 1; }
+          }
+          if (arr.length) existing[section] = arr;
+        }
+        if (!added) {
+          errors.push(path.basename(src) + ': 无新增条目（内容已存在或为空）');
+          continue;
+        }
+        const p = customVariantPathFor(expId);
+        if (!p) {
+          errors.push(path.basename(src) + ': 无效的实验名');
+          continue;
+        }
+        fs.writeFileSync(p, JSON.stringify(existing, null, 1), 'utf-8');
+        imported.push(expId);
+      } catch (e) {
+        errors.push(path.basename(src) + ': ' + e.message);
+      }
+    }
+    return { ok: true, imported, errors };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 ipcMain.handle('open-skills-folder', () => {
   const dir = getSkillsDir();
   shell.openPath(dir);
@@ -518,6 +766,8 @@ ipcMain.handle('read-audio-file', () => {
 // 实验数据热更新（COS 数据包 → userData，免重装）
 // ═══════════════════════════════════════════════
 const DATA_MANIFEST_URL = 'https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/data-manifest.json';
+// 内置实验数据版本（未应用任何数据包时的基准版本，独立于应用版本号）
+const DATA_BUILTIN_VERSION = '1.0.0';
 
 function readLocalDataManifest() {
   try {
@@ -543,7 +793,7 @@ ipcMain.handle('get-data-info', () => {
     localVersion: (mf && mf.dataVersion) || null,   // 无热更新数据时为空，即内置版本
     notes: (mf && mf.notes) || '',
     updatedAt: (mf && mf.updatedAt) || null,
-    builtinVersion: app.getVersion(),
+    builtinVersion: DATA_BUILTIN_VERSION,
   };
 });
 
@@ -555,7 +805,7 @@ ipcMain.handle('check-data-update', async () => {
     const mf = await httpsGetJson(u.href);
     const remote = String(mf.dataVersion || '').replace(/^v/i, '');
     const local = readLocalDataManifest();
-    const localVer = local ? String(local.dataVersion).replace(/^v/i, '') : app.getVersion();
+    const localVer = local ? String(local.dataVersion).replace(/^v/i, '') : DATA_BUILTIN_VERSION;
     const hasUpdate = !!(remote && compareVersions(remote, localVer) > 0);
     return {
       ok: true,

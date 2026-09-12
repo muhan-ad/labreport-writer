@@ -1737,6 +1737,24 @@ body {
   accent-color: var(--accent);
   cursor: pointer;
 }
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  transition: background var(--transition-fast);
+}
+.radio-label:hover { background: var(--bg-hover); }
+.radio-label input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 /* 常用模型快速选择 */
 .model-quick-select {
@@ -2274,6 +2292,52 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .skill-del { flex-shrink: 0; }
 .skill-empty { font-size: 13px; color: var(--text-muted, #a8a29e); padding: 10px 12px; border: 1px dashed var(--border, #e7e5e4); border-radius: 8px; }
 .skill-actions { display: flex; gap: 8px; }
+
+/* ── 设置 · 自建变体库 ── */
+.custom-variant-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; max-height: 200px; overflow-y: auto; }
+.cv-exp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #e7e5e4);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.cv-exp-row.active { border-color: var(--accent, #4a7cf7); background: #f5f8ff; }
+.cv-exp-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-exp-badges { display: flex; gap: 4px; flex-shrink: 0; font-size: 11px; color: var(--accent, #4a7cf7); }
+.cv-detail-section { margin-bottom: 10px; }
+.cv-detail-title { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #16a34a; font-weight: 600; margin: 8px 0 4px; }
+.cv-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #e7e5e4);
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 6px;
+}
+.cv-item-text { flex: 1; min-width: 0; font-size: 12px; color: #57534e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-item-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.cv-detail-empty { font-size: 12px; color: var(--text-muted, #a8a29e); padding: 8px 10px; border: 1px dashed var(--border, #e7e5e4); border-radius: 8px; }
+
+/* 实验列表「自建」徽章 */
+.exp-badge-custom {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #4a7cf7;
+  border: 1px solid #c9d9ff;
+  margin-left: 6px;
+  vertical-align: 1px;
+  flex-shrink: 0;
+}
 
 /* ── 设置 · 报告管理 ── */
 .reports-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; max-height: 380px; overflow-y: auto; }

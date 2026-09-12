@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('labAPI', {
   // 方式三：schema/data 读写（表单模式）
   readSchema: (expPath) => ipcRenderer.invoke('read-schema', expPath),
   readData: (expPath) => ipcRenderer.invoke('read-data', expPath),
+  readSampleData: (expPath) => ipcRenderer.invoke('read-sample-data', expPath),
   writeData: (expPath, data) => ipcRenderer.invoke('write-data', expPath, data),
   readRag: (expPath) => ipcRenderer.invoke('read-rag', expPath),
   readSections: (expPath) => ipcRenderer.invoke('read-sections', expPath),
@@ -55,6 +56,13 @@ contextBridge.exposeInMainWorld('labAPI', {
   // 变体组合
   loadVariants: (expPath) => ipcRenderer.invoke('load-variants', expPath),
   saveVariants: (expPath, variants) => ipcRenderer.invoke('save-variants', expPath, variants),
+  // 用户自建变体库
+  listCustomVariants: () => ipcRenderer.invoke('list-custom-variants'),
+  readCustomVariants: (expId) => ipcRenderer.invoke('read-custom-variants', expId),
+  saveCustomVariant: (expId, section, text) => ipcRenderer.invoke('save-custom-variant', expId, section, text),
+  deleteCustomVariant: (expId, section, index) => ipcRenderer.invoke('delete-custom-variant', expId, section, index),
+  exportCustomVariants: (payload) => ipcRenderer.invoke('export-custom-variants', payload),
+  importCustomVariants: () => ipcRenderer.invoke('import-custom-variants'),
   // 渲染进程事件转发到主进程日志
   logEvent: (msg) => ipcRenderer.send('log-event', msg),
   // 关闭前未保存提示

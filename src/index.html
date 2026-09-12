@@ -205,14 +205,13 @@
                 <div class="card-header">
                   <h4>测量数据</h4>
                   <div class="card-header-actions">
-                    <button class="btn btn-sm btn-outline" id="btnReloadData">重新加载</button>
                     <button class="btn btn-sm btn-outline" id="btnClearFormData" disabled>清除数据</button>
                     <button class="btn btn-sm btn-outline" id="btnFillDefaultData">填入默认数据</button>
                     <button class="btn btn-sm btn-primary" id="btnSaveData" disabled>保存修改</button>
                   </div>
                 </div>
                 <div class="card-body">
-                  <div class="data-file-info">
+                  <div class="data-file-info" id="dataFileInfo">
                     <div class="file-icon">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     </div>
@@ -438,6 +437,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 7.7l5.4-.8z"/><polyline points="12 2 12 12"/></svg>
             技能
           </button>
+          <button class="settings-nav-item" id="btnNavCustomVariants">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M4 7v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7"/><line x1="12" y1="7" x2="12" y2="17"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+            自建变体
+          </button>
           <button class="settings-nav-item" id="btnNavReports">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             报告管理
@@ -498,11 +501,23 @@
           <div class="settings-pane" id="paneSkills">
             <div class="settings-section">
               <h4>AI 润色技能（Skill）</h4>
-              <div class="form-hint">技能通过导入外部 Skill 文件添加（.md/.txt，支持带 name/description frontmatter 的 SKILL.md），在此启用/禁用或删除，并在「AI 润色」面板选择使用。</div>
               <div id="skillList" class="skill-list"></div>
               <div class="skill-actions">
                 <button class="btn btn-sm btn-primary" id="btnImportSkill" type="button">导入 skill</button>
                 <button class="btn btn-sm btn-outline" id="btnOpenSkillsFolder" type="button">打开 skill 配置文件夹</button>
+              </div>
+            </div>
+          </div>
+          <!-- 自建变体页 -->
+          <div class="settings-pane" id="paneCustomVariants">
+            <div class="settings-section">
+              <h4>自建变体库</h4>
+              <div id="customVariantExpList" class="custom-variant-list"></div>
+              <div id="customVariantDetail" class="custom-variant-detail"></div>
+              <div class="skill-actions">
+                <button class="btn btn-sm btn-primary" id="btnExportCustomVariant" type="button">导出当前实验</button>
+                <button class="btn btn-sm btn-outline" id="btnExportAllCustomVariants" type="button">导出全部</button>
+                <button class="btn btn-sm btn-outline" id="btnImportCustomVariants" type="button" style="display:none;">导入（批量）</button>
               </div>
             </div>
           </div>
@@ -588,21 +603,24 @@
               </div>
             </div>
             <div class="settings-section update-simple">
-              <h4 style="margin: 0 0 8px;">实验数据</h4>
-              <div class="form-hint">实验内容（变体、知识库、新增实验）更新无需重装应用。当前数据版本：<b id="dataVersionText">—</b></div>
-              <div class="skill-actions">
-                <button class="btn btn-outline btn-block" id="btnCheckDataUpdate" type="button">检查实验数据更新</button>
+              <div class="update-version">
+                <span class="update-version-label">当前数据版本</span>
+                <span class="update-version-value" id="dataVersionText">1.0.0</span>
               </div>
-              <div class="form-hint" id="dataUpdateResult"></div>
+              <div class="skill-actions">
+                <button class="btn btn-primary btn-block" id="btnCheckDataUpdate" type="button">检查实验数据更新</button>
+              </div>
             </div>
           </div>
           <!-- 开发者调试页 -->
           <div class="settings-pane" id="paneDevelop">
             <div class="settings-section">
               <h4>开发者调试</h4>
-              <div class="form-hint">开启后可显示批量生成、实验多选、队列与数据模板外部打开等高级入口；普通模式下只保留单人单个实验的常规流程。两种模式下「填入默认数据」按钮均可用。</div>
               <div class="form-row">
-                <label class="checkbox-label"><input type="checkbox" id="chkDevelopMode" /> 启动开发者调试模式</label>
+                <label class="radio-label"><input type="radio" name="devModeRadio" id="rdNormalMode" checked /> 普通模式</label>
+              </div>
+              <div class="form-row">
+                <label class="radio-label"><input type="radio" name="devModeRadio" id="rdDevMode" /> 开发者调试</label>
               </div>
             </div>
           </div>
@@ -673,6 +691,9 @@
         <div class="form-row">
           <label>AI 生成结果（可直接编辑后保存）</label>
           <textarea id="variantAIResult" rows="6"></textarea>
+        </div>
+        <div class="form-row">
+          <label class="checkbox-label"><input type="checkbox" id="chkArchiveVariant" checked /> 同时存入自建变体库</label>
         </div>
         <div class="form-hint">提示：AI 会保留 $...$ 公式与 %%DATA:xxx%% 数据占位符，只改写文字描述。</div>
       </div>
