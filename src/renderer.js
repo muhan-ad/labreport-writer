@@ -548,9 +548,9 @@ async function loadFormData(exp) {
 }
 
 // 清除表单全部可输入数据（置空，便于从头填写；需点"保存修改"才写入 data.json）
-function clearFormData() {
+async function clearFormData() {
   if (!currentSchema || !currentExp) return;
-  if (!confirm('清除当前实验表单中已填写的全部数据？\n所有字段将置为空值，清除后需点击「保存修改」才会写入数据文件。')) return;
+  if (!(await appConfirm('清除当前实验表单中已填写的全部数据？\n所有字段将置为空值，清除后需点击「保存修改」才会写入数据文件。', { danger: true }))) return;
   for (const group of (currentSchema.groups || [])) {
     for (const fld of (group.fields || [])) {
       if (fld.type === 'array') {
@@ -573,8 +573,8 @@ function clearFormData() {
 // 填入默认数据：整表恢复为实验内置的测试数据（sample.json 快照；缺失时回退 schema 默认值），需二次确认
 async function fillDefaultData() {
   if (!currentSchema || !currentExp) return;
-  if (!confirm('将当前实验表单整表恢复为实验内置的测试数据？\n您已填写的字段将被测试数据覆盖！')) return;
-  if (!confirm('最后确认：恢复后当前填写内容将丢失，确定继续？')) return;
+  if (!(await appConfirm('将当前实验表单整表恢复为实验内置的测试数据？\n您已填写的字段将被测试数据覆盖！', { danger: true }))) return;
+  if (!(await appConfirm('最后确认：恢复后当前填写内容将丢失，确定继续？', { danger: true }))) return;
   let sample = null;
   try {
     const r = await window.labAPI.readSampleData(currentExp.path);
@@ -1008,7 +1008,7 @@ function renderSkillRows() {
     del.className = 'btn btn-sm btn-ghost skill-del';
     del.textContent = '删除';
     del.onclick = async () => {
-      if (!confirm('删除技能「' + sk.name + '」？\n技能文件将从配置文件夹中移除。')) return;
+      if (!(await appConfirm('删除技能「' + sk.name + '」？\n技能文件将从配置文件夹中移除。', { danger: true }))) return;
       const rr = await window.labAPI.deleteSkill(sk.id);
       if (rr && rr.ok) { showToast('success', '已删除', sk.name); await loadSkillList(); }
       else showToast('error', '删除失败', (rr && rr.error) || '未知错误', 5000);
@@ -1131,7 +1131,7 @@ async function deleteCustomVariantOne(section, index) {
   if (!customVariantsSelId) return;
   const arr = (customVariantsDetail && customVariantsDetail[section]) || [];
   const preview = typeof arr[index] === 'string' ? arr[index].slice(0, 30) : '';
-  if (!confirm(`删除「${section}」中的这条自建变体？\n${preview}…`)) return;
+  if (!(await appConfirm(`删除「${section}」中的这条自建变体？\n${preview}…`, { danger: true }))) return;
   const r = await window.labAPI.deleteCustomVariant(customVariantsSelId, section, index);
   if (!r.ok) { showToast('error', '删除失败', r.error, 5000); return; }
   showToast('success', '已删除', '自建变体条目已移除');
@@ -1145,7 +1145,7 @@ async function restoreVariantToExperiment(section, index) {
   if (typeof text !== 'string' || !text) { showToast('error', '内容无效', '该条目内容为空'); return; }
   const target = experiments.find(e => e.id === customVariantsSelId);
   if (!target) { showToast('error', '未找到实验', '该实验可能已被移除'); return; }
-  if (!confirm(`把「${section}」的这条自建变体追加到实验「${customVariantsSelId}」的变体列表？\n恢复后可在该实验的变体下拉中选用。`)) return;
+  if (!(await appConfirm(`把「${section}」的这条自建变体追加到实验「${customVariantsSelId}」的变体列表？\n恢复后可在该实验的变体下拉中选用。`))) return;
   const lr = await window.labAPI.loadVariants(target.path);
   const variants = (lr && lr.ok && lr.variants) ? lr.variants : {};
   const cur = Array.isArray(variants[section]) ? variants[section] : [];
@@ -1577,6 +1577,10 @@ function bindEvents() {
   $('btnCheckDataUpdate').onclick = checkDataUpdate;
   $('btnUpdateLater').onclick = () => closeModal('updateModal');
   $('btnCloseUpdateModal').onclick = () => closeModal('updateModal');
+  // 通用确认弹窗
+  $('btnConfirmOk').onclick = () => settleConfirm(true);
+  $('btnConfirmCancel').onclick = () => settleConfirm(false);
+  $('btnConfirmClose').onclick = () => settleConfirm(false);
   // 贡献数据弹窗
   $('btnContribute').onclick = openContributeModal;
   $('btnCloseContribute').onclick = () => closeModal('contributeModal');
@@ -1683,6 +1687,30 @@ function bindEvents() {
 function openModal(id) { $(id).classList.add('show'); }
 function closeModal(id) { $(id).classList.remove('show'); }
 
+// ── 通用确认弹窗（Promise 化）：替代 window.confirm——原生对话框在 Windows 上会破坏
+// 窗口焦点状态，导致后续原生 select 下拉不弹出、键盘输入失效 ──
+let pendingConfirmResolve = null;
+function appConfirm(msg, opts = {}) {
+  return new Promise((resolve) => {
+    $('confirmTitle').textContent = opts.title || '确认操作';
+    $('confirmMsg').textContent = msg;
+    const okBtn = $('btnConfirmOk');
+    okBtn.textContent = opts.okText || '确定';
+    okBtn.classList.toggle('btn-danger', !!opts.danger);
+    okBtn.classList.toggle('btn-primary', !opts.danger);
+    pendingConfirmResolve = resolve;
+    openModal('confirmModal');
+  });
+}
+function settleConfirm(result) {
+  if (pendingConfirmResolve) {
+    const r = pendingConfirmResolve;
+    pendingConfirmResolve = null;
+    r(result);
+  }
+  closeModal('confirmModal');
+}
+
 async function openDataFile() {
   if (currentExp && currentExp.dataFile) {
     const r = await window.labAPI.openFile(currentExp.dataFile);
@@ -1775,8 +1803,9 @@ async function checkDataUpdate() {
       showToast('success', '已是最新', `实验数据已是最新（v${r.localVersion}）`, 3000);
       return;
     }
-    const ok = confirm(
-      `发现实验数据新版本 v${r.remoteVersion}（当前 v${r.localVersion}）\n\n${r.notes || '（无更新说明）'}\n\n是否立即下载并更新？\n更新不会覆盖您已填写的测量数据。`
+    const ok = await appConfirm(
+      `发现实验数据新版本 v${r.remoteVersion}（当前 v${r.localVersion}）\n\n${r.notes || '（无更新说明）'}\n\n是否立即下载并更新？\n更新不会覆盖您已填写的测量数据。`,
+      { okText: '立即更新' }
     );
     if (!ok) {
       showToast('info', '已取消', `新版本 v${r.remoteVersion} 待更新`, 3000);
@@ -2205,7 +2234,7 @@ async function loadReportsList() {
     actions.appendChild(mkBtn('打开', 'btn-outline', () => window.labAPI.openFile(rep.path)));
     actions.appendChild(mkBtn('文件夹', 'btn-outline', () => window.labAPI.showInFolder(rep.path)));
     actions.appendChild(mkBtn('删除', 'btn-ghost report-del', async () => {
-      if (!confirm(`删除「${rep.exp}」的报告 ${rep.file}？\n（测量数据与变体不受影响）`)) return;
+      if (!(await appConfirm(`删除「${rep.exp}」的报告 ${rep.file}？\n（测量数据与变体不受影响）`, { danger: true }))) return;
       const rr = await window.labAPI.deleteReport(rep.path);
       if (rr && rr.ok) {
         showToast('success', '已删除', rep.file);
@@ -2238,7 +2267,7 @@ async function refreshAfterReportChange() {
 async function deleteAllReports() {
   const reports = lastReportsList || [];
   if (!reports.length) return;
-  if (!confirm(`删除全部 ${reports.length} 份已生成报告？\n（仅移除报告文件，测量数据、变体与已导入润色不受影响）`)) return;
+  if (!(await appConfirm(`删除全部 ${reports.length} 份已生成报告？\n（仅移除报告文件，测量数据、变体与已导入润色不受影响）`, { danger: true }))) return;
   let ok = 0, fail = 0;
   for (const rep of reports) {
     try {
@@ -2569,6 +2598,9 @@ function previewVariant(section, texts) {
   openModal('variantPreviewModal');
 }
 
+// AI 变体调整的默认提示词（专业学术风格）
+const DEFAULT_VARIANT_AI_PROMPT = '请用专业、严谨的学术写作风格改写这段实验报告文本：物理概念表述准确、术语规范（如“测量”“不确定度”“系统误差”等使用得当），逻辑连贯、语言凝练，避免口语化表达与重复措辞；保持原意与数据不变，必须原样保留所有 $...$ 公式与 %%DATA:xxx%% 数据占位符。';
+
 function openVariantAI(section) {
   const texts = currentVariants[section] || [];
   if (texts.length === 0) return;
@@ -2577,14 +2609,19 @@ function openVariantAI(section) {
   if (idx < 0 || idx >= texts.length) idx = 0;
   aiVariantSection = section;
   $('variantAITitle').textContent = `AI 调整变体 — ${section}（变体 ${idx + 1}）`;
-  $('variantAIInstruction').value = '';
+  $('variantAIInstruction').value = DEFAULT_VARIANT_AI_PROMPT;
   $('variantAIOriginal').value = texts[idx];
   $('variantAIResult').value = '';
   $('chkArchiveVariant').checked = true;   // 每次打开默认勾选「同时存入自建变体库」
   openModal('variantAIModal');
 }
 
+let aiGenerating = false;     // AI 生成进行中（防重复触发）
+let aiRequestId = null;       // 当前请求 ID（用于主进程中止）
+let aiCancelled = false;      // 用户已请求取消
+
 async function runVariantAI() {
+  if (aiGenerating) return;
   const instruction = $('variantAIInstruction').value.trim();
   const original = $('variantAIOriginal').value;
   if (!original) { showToast('error', '内容为空', '没有可调整的原文本'); return; }
@@ -2593,8 +2630,12 @@ async function runVariantAI() {
     showToast('error', '未配置 API Key', '请先在设置中填写 API Key');
     return;
   }
+  aiGenerating = true;
+  aiCancelled = false;
+  aiRequestId = 'ai-' + Date.now();
   $('btnVariantAIRetry').disabled = true;
   $('btnVariantAIRetry').textContent = '生成中...';
+  $('btnCancelVariantAI').textContent = '取消生成';
   try {
     const messages = [
       {
@@ -2613,18 +2654,25 @@ async function runVariantAI() {
       model: settings.model,
       messages,
       temperature: 0.8,
+      requestId: aiRequestId,
     });
+    if (aiCancelled) return;   // 用户已取消：丢弃结果
     if (result.ok) {
       $('variantAIResult').value = result.content.trim();
       showToast('success', '生成完成', 'AI 已生成新变体，可编辑后保存');
+    } else if (result.cancelled) {
+      showToast('info', '已取消', '本次 AI 生成已中止');
     } else {
       showToast('error', '生成失败', result.error, 5000);
     }
   } catch (err) {
-    showToast('error', '生成异常', err.message, 5000);
+    if (!aiCancelled) showToast('error', '生成异常', err.message, 5000);
   } finally {
+    aiGenerating = false;
+    aiRequestId = null;
     $('btnVariantAIRetry').disabled = false;
     $('btnVariantAIRetry').textContent = '生成/重试';
+    $('btnCancelVariantAI').textContent = '取消';
   }
 }
 
@@ -2654,8 +2702,22 @@ async function saveVariantAI() {
 function bindVariantsEvents() {
   $('btnRandomVariants').onclick = randomizeVariants;
   $('btnRefreshVariants').onclick = () => { if (currentExp) loadVariantsUI(currentExp); };
-  $('btnCloseVariantAI').onclick = () => closeModal('variantAIModal');
-  $('btnCancelVariantAI').onclick = () => closeModal('variantAIModal');
+  $('btnCloseVariantAI').onclick = () => {
+    if (aiGenerating) {   // 生成中关闭窗口也中止请求
+      aiCancelled = true;
+      window.labAPI.aiChatCancel(aiRequestId);
+    }
+    closeModal('variantAIModal');
+  };
+  $('btnCancelVariantAI').onclick = () => {
+    if (aiGenerating) {   // 生成中：中止请求但不关窗，可修改后重新生成
+      aiCancelled = true;
+      window.labAPI.aiChatCancel(aiRequestId);
+      showToast('info', '已取消生成', '已中止本次 AI 请求');
+      return;
+    }
+    closeModal('variantAIModal');
+  };
   $('btnVariantAIRetry').onclick = runVariantAI;
   $('btnSaveVariantAI').onclick = saveVariantAI;
   $('btnCloseVariantPreview').onclick = () => closeModal('variantPreviewModal');

@@ -50,8 +50,9 @@ contextBridge.exposeInMainWorld('labAPI', {
   onDataProgress: (callback) => {
     ipcRenderer.on('data-update-progress', (_, data) => callback(data));
   },
-  // AI 对话
+  // AI 对话（requestId 支持取消）
   aiChat: (params) => ipcRenderer.invoke('ai-chat', params),
+  aiChatCancel: (requestId) => ipcRenderer.send('ai-chat-cancel', requestId),
   // 变体组合
   loadVariants: (expPath) => ipcRenderer.invoke('load-variants', expPath),
   saveVariants: (expPath, variants) => ipcRenderer.invoke('save-variants', expPath, variants),

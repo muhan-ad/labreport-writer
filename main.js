@@ -1508,9 +1508,12 @@ const AI_PROVIDERS = {
   },
 };
 
-// ── IPC: AI 对话 ──
+// ── IPC: AI 对话（requestId 支持取消：ai-chat-cancel 中止对应请求）──
+const aiAbortControllers = new Map();   // requestId -> AbortController
 ipcMain.handle('ai-chat', async (_, params) => {
-  const { provider, apiKey, apiUrl, model, messages, temperature = 0.7 } = params;
+  const { provider, apiKey, apiUrl, model, messages, temperature = 0.7, requestId } = params;
+  const controller = new AbortController();
+  if (requestId) aiAbortControllers.set(String(requestId), controller);
   try {
     const preset = AI_PROVIDERS[provider] || AI_PROVIDERS.custom;
     // 用户设置了 apiUrl 就用用户的，否则用预设默认值
@@ -1536,6 +1539,7 @@ ipcMain.handle('ai-chat', async (_, params) => {
         temperature,
         stream: false,
       }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -1547,7 +1551,21 @@ ipcMain.handle('ai-chat', async (_, params) => {
     const content = data.choices?.[0]?.message?.content || '';
     return { ok: true, content, usage: data.usage };
   } catch (err) {
+    if (controller.signal.aborted) {
+      return { ok: false, cancelled: true, error: '已取消生成' };
+    }
     return { ok: false, error: err.message };
+  } finally {
+    if (requestId) aiAbortControllers.delete(String(requestId));
+  }
+});
+
+// 取消一次进行中的 AI 请求
+ipcMain.on('ai-chat-cancel', (_, requestId) => {
+  const c = aiAbortControllers.get(String(requestId || ''));
+  if (c) {
+    try { c.abort(); } catch (e) { /* 忽略 */ }
+    aiAbortControllers.delete(String(requestId || ''));
   }
 });
 

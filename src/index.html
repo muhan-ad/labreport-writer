@@ -713,6 +713,23 @@
     </div>
   </div>
 
+  <!-- 通用确认弹窗（替代原生 confirm，避免破坏窗口焦点） -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="confirmTitle">确认操作</h3>
+        <button class="modal-close" id="btnConfirmClose">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMsg" style="white-space: pre-wrap; font-size: 13px; line-height: 1.7;"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btnConfirmCancel">取消</button>
+        <button class="btn btn-primary" id="btnConfirmOk">确定</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 高危警告弹窗（多级确认） -->
   <div class="modal-overlay" id="dangerModal">
     <div class="modal modal-danger">
