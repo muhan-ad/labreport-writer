@@ -229,14 +229,57 @@ function hasCustomVariantsFor(expId) {
 function getDataRoots() {
   const udRoot = path.join(app.getPath('userData'), '实验数据', '实验脚本');
   const mfPath = path.join(app.getPath('userData'), '实验数据', 'data-manifest.json');
+  // userData 根无条件激活：安装目录为只读出厂数据，用户的实验数据/报告一律落 userData
+  try { fs.mkdirSync(udRoot, { recursive: true }); } catch (e) { /* 忽略 */ }
   const roots = [];
-  if (fs.existsSync(mfPath) && fs.existsSync(udRoot)) {
+  if (fs.existsSync(udRoot)) {
     roots.push({ dir: udRoot, source: 'userData' });
   }
   if (fs.existsSync(EXPERIMENTS_DIR)) {
     roots.push({ dir: EXPERIMENTS_DIR, source: 'builtin' });
   }
   return { roots, udRoot, mfPath };
+}
+
+// 递归复制目录（源/目标各受独立根边界约束）
+function copyDirTo(src, dest, srcRoot, destRoot) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const f of fs.readdirSync(src)) {
+    const s = ensureInside(path.join(src, f), srcRoot);
+    const d = ensureInside(path.join(dest, f), destRoot);
+    const st = fs.statSync(s);
+    if (st.isDirectory()) copyDirTo(s, d, srcRoot, destRoot);
+    else fs.copyFileSync(s, d);
+  }
+}
+
+// 用户数据隔离：写操作前若实验目录仍在安装目录（builtin），先把整目录镜像到 userData 并返回新路径；
+// 此后该实验的读写生成全部走 userData 副本，安装目录保持只读出厂状态
+function ensureUserCopy(expPath) {
+  try {
+    const p = path.resolve(expPath);
+    const builtinRoot = path.resolve(EXPERIMENTS_DIR);
+    const { udRoot } = getDataRoots();
+    const udRootRes = path.resolve(udRoot);
+    if (p.startsWith(udRootRes + path.sep)) return p;          // 已在 userData
+    if (!p.startsWith(builtinRoot + path.sep)) return p;      // 非安装目录内的路径原样返回
+    const name = path.relative(builtinRoot, p).split(path.sep).shift();
+    if (!name || name === 'common' || name.startsWith('.')) return p;
+    const dst = path.join(udRootRes, name);
+    if (fs.existsSync(dst)) return dst;                        // 已镜像过
+    fs.mkdirSync(dst, { recursive: true });
+    for (const f of fs.readdirSync(p)) {
+      if (f === '__pycache__' || f.startsWith('~$') || f.includes('.~saving')) continue;
+      const s = ensureInside(path.join(p, f), builtinRoot);
+      const d = ensureInside(path.join(dst, f), udRootRes);
+      const st = fs.statSync(s);
+      if (st.isDirectory()) copyDirTo(s, d, builtinRoot, udRootRes);
+      else fs.copyFileSync(s, d);
+    }
+    return dst;
+  } catch (e) {
+    return path.resolve(expPath);   // 迁移失败退化为原路径，保持可写
+  }
 }
 
 function scanDirEntry(d, source) {
@@ -322,12 +365,12 @@ ipcMain.handle('read-data', (_, expPath) => {
   }
 });
 
-// ── IPC: 写入 data.json（方式三：保存表单数据）──
+// ── IPC: 写入 data.json（方式三：保存表单数据；用户数据落 userData 副本）──
 ipcMain.handle('write-data', (_, expPath, data) => {
   try {
-    const p = path.join(expPath, 'data.json');
-    fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
-    return { ok: true };
+    const p = ensureUserCopy(expPath);
+    fs.writeFileSync(path.join(p, 'data.json'), JSON.stringify(data, null, 2), 'utf-8');
+    return { ok: true, path: p };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -1085,7 +1128,8 @@ function httpsGetJson(url, timeout = 15000) {
 // ── IPC: 当前应用版本 ──
 ipcMain.handle('get-app-version', () => app.getVersion());
 
-// 检查更新：读取自定义更新清单 latest.json（{ version, notes, url, fileName }）
+// 检查更新：读取更新清单 latest.json（{ version, notes, downloads:[{name,url,hint}] }），仅做版本校对，
+// 不下载不安装——把下载入口交给用户（浏览器打开对应链接）
 ipcMain.handle('check-for-update', async (_, cfg) => {
   try {
     const manifestUrl = String((cfg && cfg.manifestUrl) || '').trim();
@@ -1100,14 +1144,16 @@ ipcMain.handle('check-for-update', async (_, cfg) => {
     const mf = await httpsGetJson(u.href);
     const latest = String(mf.version || '').replace(/^v/i, '');
     const hasUpdate = !!(latest && compareVersions(latest, current) > 0);
-    const dlUrl = String(mf.url || '').trim();
-    let safeDlUrl = '';
-    if (dlUrl) {
-      const du = assertPublicUrl(dlUrl);
-      if (!(await checkPublicDns(du.hostname))) {
-        throw new Error('安装包下载地址无法解析或指向本地地址');
-      }
-      safeDlUrl = du.href;
+    const downloads = [];
+    for (const d of (Array.isArray(mf.downloads) ? mf.downloads : [])) {
+      const name = String(d.name || '').trim();
+      const rawUrl = String(d.url || '').trim();
+      if (!name || !rawUrl) continue;
+      try {
+        const du = assertPublicUrl(rawUrl);
+        if (!(await checkPublicDns(du.hostname))) continue;   // 非法/本地入口直接跳过
+        downloads.push({ name, url: du.href, hint: String(d.hint || '').trim() });
+      } catch (e) { /* 跳过非法下载入口 */ }
     }
     return {
       ok: true,
@@ -1115,77 +1161,130 @@ ipcMain.handle('check-for-update', async (_, cfg) => {
       current,
       latest,
       notes: String(mf.notes || '').trim(),
-      assets: safeDlUrl
-        ? [{ name: String(mf.fileName || 'update.exe'), url: safeDlUrl, size: 0 }]
-        : [],
-      releaseUrl: '',
+      downloads,
     };
   } catch (err) {
     return { ok: false, error: err.message, hasUpdate: false };
   }
 });
 
-// 取消下载：销毁当前更新下载请求
-let activeUpdateReq = null;
-ipcMain.on('cancel-update-download', () => {
-  if (activeUpdateReq) {
-    try { activeUpdateReq.destroy(); } catch (e) { /* 忽略 */ }
-    activeUpdateReq = null;
-  }
-});
-
-// 下载更新安装包（进度经 'update-download-progress' 回传）
-ipcMain.handle('download-update', async (event, payload) => {
-  const rawUrl = String((payload && payload.url) || '');
-  let url;
+// ── IPC: 浏览器打开下载链接（仅允许公网 http/https）──
+ipcMain.handle('open-external', async (_, rawUrl) => {
   try {
     const u = assertPublicUrl(rawUrl);
-    if (!(await checkPublicDns(u.hostname))) throw new Error('下载地址无法解析或指向本地地址');
-    url = u.href;
+    if (!(await checkPublicDns(u.hostname))) {
+      return { ok: false, error: '链接无法解析或指向本地地址' };
+    }
+    await shell.openExternal(u.href);
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
-  const fileName = path.basename(String((payload && payload.name) || 'update.exe'));
-  if (!fileName || fileName.includes('..') || /[\\/]/.test(fileName)) {
-    return { ok: false, error: '非法的文件名' };
-  }
-  const dlRoot = path.resolve(app.getPath('downloads'));
-  const dest = path.resolve(dlRoot, fileName);
-  if (!dest.startsWith(dlRoot + path.sep)) {
-    return { ok: false, error: '非法的文件路径' };
-  }
-  const sendProgress = (percent) => {
-    try { event.sender.send('update-download-progress', { percent }); } catch (e) { /* 窗口可能已关闭 */ }
-  };
-  return new Promise((resolve) => {
-    const req = https.get(url, {
-      headers: { 'User-Agent': 'labreport-writer-updater' },
-    }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        activeUpdateReq = null;
-        return resolve({ ok: false, error: '下载地址发生了重定向，请稍后重试' });
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        activeUpdateReq = null;
-        return resolve({ ok: false, error: `下载失败 HTTP ${res.statusCode}` });
-      }
-      const total = parseInt(res.headers['content-length'] || '0', 10) || 0;
-      let received = 0;
-      const out = fs.createWriteStream(dest);
-      res.pipe(out);
-      res.on('data', (chunk) => {
-        received += chunk.length;
-        if (total) sendProgress(Math.min(99, Math.round(received * 100 / total)));
+});
+
+// ═══════════════════════════════════════════════
+// 贡献数据上传（COS 直传：凭证云函数返回预签名 PUT 地址，密钥不进应用）
+// ═══════════════════════════════════════════════
+// 凭证云函数 URL（部署后替换；为空表示未启用，应用侧会给出明确提示）
+const CONTRIBUTE_FN_URL = '';
+
+// 请求上传凭证：云函数校验 key 前缀（contributions/variants|reports）并返回预签名 PUT 地址
+ipcMain.handle('contribute-get-credentials', async (_, payload) => {
+  try {
+    const fnUrl = String((payload && payload.fnUrl) || CONTRIBUTE_FN_URL || '').trim();
+    if (!fnUrl) return { ok: false, error: '贡献上传服务未配置（请联系开发者部署凭证云函数）' };
+    const keys = Array.isArray((payload && payload.keys) || []) ? payload.keys : [];
+    if (!keys.length || keys.length > 20) return { ok: false, error: '文件数量无效' };
+    for (const k of keys) {
+      if (typeof k !== 'string') return { ok: false, error: '文件名格式无效' };
+      const m = String(k).match(/^contributions\/(variants|reports)\/([^/]+)\/([^/]+)$/);
+      if (!m) return { ok: false, error: '贡献路径无效：' + String(k).slice(0, 120) };
+    }
+    const u = assertPublicUrl(fnUrl);
+    if (!(await checkPublicDns(u.hostname))) {
+      return { ok: false, error: '凭证服务地址无法解析或指向本地地址' };
+    }
+    const body = JSON.stringify({ keys });
+    const resp = await new Promise((resolve, reject) => {
+      const r = https.request(u, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          'User-Agent': 'labreport-writer-contributor',
+        },
+        timeout: 15000,
+      }, res => {
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', c => { data += c; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('凭证响应解析失败')); }
+        });
       });
-      out.on('finish', () => { activeUpdateReq = null; sendProgress(100); resolve({ ok: true, filePath: dest }); });
-      out.on('error', (e) => { activeUpdateReq = null; res.destroy(); resolve({ ok: false, error: e.message }); });
-      res.on('error', (e) => { activeUpdateReq = null; out.destroy(); resolve({ ok: false, error: e.message }); });
+      r.on('error', reject);
+      r.on('timeout', () => r.destroy(new Error('凭证请求超时')));
+      r.write(body);
+      r.end();
     });
-    req.on('error', (e) => { activeUpdateReq = null; resolve({ ok: false, error: e.message }); });
-    activeUpdateReq = req;
-  });
+    const items = Array.isArray(resp && resp.items) ? resp.items : [];
+    const out = [];
+    for (const it of items) {
+      const putUrl = String(it.putUrl || '').trim();
+      if (!putUrl) continue;
+      try {
+        const pu = assertPublicUrl(putUrl);
+        if (!(await checkPublicDns(pu.hostname))) continue;
+        out.push({ key: String(it.key || ''), putUrl: pu.href });
+      } catch (e) { /* 跳过非法凭证 */ }
+    }
+    if (!out.length) return { ok: false, error: '凭证服务未返回有效上传地址' };
+    return { ok: true, items: out };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 直传单个文件到预签名 PUT 地址（仅公网 https；单文件上限 20MB）
+ipcMain.handle('contribute-upload', async (_, payload) => {
+  try {
+    const rawUrl = String((payload && payload.putUrl) || '');
+    const u = assertPublicUrl(rawUrl);
+    if (!(await checkPublicDns(u.hostname))) {
+      return { ok: false, error: '上传地址无效或指向本地地址' };
+    }
+    const rawData = payload && payload.data;
+    if (!(rawData instanceof Uint8Array || rawData instanceof ArrayBuffer || Buffer.isBuffer(rawData))) {
+      return { ok: false, error: '上传内容无效' };
+    }
+    const buf = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData);
+    if (buf.length > 20 * 1024 * 1024) return { ok: false, error: '单个文件不能超过 20MB' };
+    const contentType = String((payload && payload.contentType) || 'application/octet-stream');
+    const resp = await new Promise((resolve, reject) => {
+      const r = https.request(u, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': buf.length,
+          'User-Agent': 'labreport-writer-contributor',
+        },
+        timeout: 120000,
+      }, res => {
+        res.resume();
+        res.on('end', () => resolve({ status: res.statusCode }));
+      });
+      r.on('error', reject);
+      r.on('timeout', () => r.destroy(new Error('上传超时')));
+      r.write(buf);
+      r.end();
+    });
+    if (resp.status !== 200 && resp.status !== 204) {
+      return { ok: false, error: `上传失败 HTTP ${resp.status}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // ── IPC: 用默认程序打开文件 ──
@@ -1201,6 +1300,8 @@ ipcMain.handle('open-file', (_, filePath) => {
 // variants.compose 向 stdout 打印的章节原文标记（供应用侧按章节润色/导入重生成）
 const SECTIONS_MARKER = '.LAB_SECTIONS_JSON:';
 ipcMain.handle('run-generate', async (_, expPath, studentInfo, variants, polish) => {
+  // 生成报告属写操作：迁移/复用 userData 副本，报告与章节缓存不再落入安装目录
+  expPath = ensureUserCopy(expPath);
   const generatePy = path.join(expPath, 'generate.py');
   if (!fs.existsSync(generatePy)) {
     return { ok: false, error: 'generate.py 不存在', logs: [] };
@@ -1421,15 +1522,15 @@ ipcMain.handle('load-variants', async (_, expPath) => {
   }
 });
 
-// ── 变体组合：保存实验的 variants.json（AI 调整结果写回）──
+// ── 变体组合：保存实验的 variants.json（AI 调整结果写回；用户数据落 userData 副本）──
 ipcMain.handle('save-variants', async (_, expPath, variants) => {
   try {
     if (!variants || typeof variants !== 'object') {
       return { ok: false, error: '变体数据无效' };
     }
-    const p = path.join(expPath, 'variants.json');
-    fs.writeFileSync(p, JSON.stringify(variants, null, 1), 'utf-8');
-    return { ok: true };
+    const p = ensureUserCopy(expPath);
+    fs.writeFileSync(path.join(p, 'variants.json'), JSON.stringify(variants, null, 1), 'utf-8');
+    return { ok: true, path: p };
   } catch (err) {
     return { ok: false, error: err.message };
   }

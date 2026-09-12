@@ -1575,15 +1575,19 @@ function bindEvents() {
   $('btnFillDefaultData').onclick = fillDefaultData;
   $('btnCheckUpdate').onclick = checkForUpdate;
   $('btnCheckDataUpdate').onclick = checkDataUpdate;
-  $('btnUpdateDownload').onclick = downloadUpdate;
-  $('btnUpdateLater').onclick = () => {
-    if (updateDownloading) window.labAPI.cancelUpdateDownload();
-    closeModal('updateModal');
-  };
-  $('btnCloseUpdateModal').onclick = () => {
-    if (updateDownloading) window.labAPI.cancelUpdateDownload();
-    closeModal('updateModal');
-  };
+  $('btnUpdateLater').onclick = () => closeModal('updateModal');
+  $('btnCloseUpdateModal').onclick = () => closeModal('updateModal');
+  // 贡献数据弹窗
+  $('btnContribute').onclick = openContributeModal;
+  $('btnCloseContribute').onclick = () => closeModal('contributeModal');
+  $('btnCancelContribute').onclick = () => closeModal('contributeModal');
+  $('btnCVTabVariant').onclick = () => switchCVTab('variant');
+  $('btnCVTabReport').onclick = () => switchCVTab('report');
+  $('btnCVPickPhotos').onclick = () => $('cvPhotoInput').click();
+  $('cvPhotoInput').onchange = (e) => handleCVPhotos(e.target.files);
+  $('btnCVPickDocx').onclick = () => $('cvDocxInput').click();
+  $('cvDocxInput').onchange = (e) => handleCVDocx(e.target.files);
+  $('btnContributeUpload').onclick = doContributeUpload;
   $('btnDangerGo').onclick = startDangerFlow;
   $('btnDangerExit').onclick = exitDangerFlow;
   $('btnDangerProceed').onclick = proceedDangerFlow;
@@ -1730,8 +1734,7 @@ function switchSettingsPane(name) {
 
 // ── 检查更新（对象存储清单，国内高速）──
 const MANIFEST_URL = 'https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/latest.json';
-let updateInfo = null;   // 最近一次检查结果（含 assets）
-let updateDownloading = false;
+let updateInfo = null;   // 最近一次检查结果（含下载入口）
 
 function loadUpdatePane() {
   window.labAPI.getAppVersion().then(v => {
@@ -1827,8 +1830,6 @@ async function checkForUpdate() {
     updateInfo = r;
     if (r.hasUpdate) {
       openUpdateModal(r);
-      // 发现新版本后自动开始下载
-      setTimeout(() => downloadUpdate(), 400);
     } else {
       showToast('success', '检查更新', `目前已是最新版本 v${r.current}`, 4000);
     }
@@ -1840,58 +1841,237 @@ async function checkForUpdate() {
   }
 }
 
+// 仅提示新版本：渲染下载入口链接（浏览器打开），不自动下载
 function openUpdateModal(r) {
   $('updateModalTitle').textContent = `发现新版本 v${r.latest}`;
   $('updateMeta').textContent = `当前版本 v${r.current} → 最新版本 v${r.latest}`;
-  const notesEl = $('updateNotes');
-  notesEl.textContent = r.notes || '（本次更新未填写说明）';
-  // 优先 exe 安装包，其次 zip
-  const exe = r.assets.find(a => /\.exe$/i.test(a.name));
-  const asset = exe || r.assets[0] || null;
-  $('btnUpdateDownload').disabled = !asset;
-  if (!asset) {
-    $('btnUpdateDownload').textContent = '暂无安装包';
-  } else {
-    $('btnUpdateDownload').textContent = '立即下载' + (exe ? '' : '（压缩包）');
-  }
-  $('updateProgressWrap').style.display = 'none';
+  $('updateNotes').textContent = r.notes || '（本次更新未填写说明）';
+  const wrap = $('updateDownloadsWrap');
+  const downloads = Array.isArray(r.downloads) ? r.downloads : [];
+  wrap.innerHTML = downloads.length
+    ? '<div class="update-downloads">' + downloads.map(d =>
+        `<div class="update-download-link">`
+        + `<span><span class="update-download-name">${escapeHtml(d.name)}</span>`
+        + (d.hint ? ` <span class="update-download-hint">${escapeHtml(d.hint)}</span>` : '') + `</span>`
+        + `<button class="btn btn-sm btn-primary cv-open-link" data-url="${escapeHtml(d.url)}">下载</button>`
+        + `</div>`
+      ).join('') + '</div>'
+    : '<div class="form-hint">暂无可用下载链接，请稍后再试</div>';
+  wrap.querySelectorAll('.cv-open-link').forEach(b => {
+    b.onclick = async () => {
+      const res = await window.labAPI.openExternal(b.dataset.url);
+      if (!res.ok) showToast('error', '无法打开链接', res.error, 5000);
+    };
+  });
   openModal('updateModal');
 }
 
-async function downloadUpdate() {
-  if (!updateInfo || !updateInfo.assets.length || updateDownloading) return;
-  const asset = updateInfo.assets.find(a => /\.exe$/i.test(a.name)) || updateInfo.assets[0];
-  updateDownloading = true;
-  $('btnUpdateDownload').disabled = true;
-  $('btnUpdateLater').disabled = true;
-  $('updateProgressWrap').style.display = 'block';
-  $('updateProgressFill').style.width = '0%';
-  $('updateProgressText').textContent = '正在连接下载服务器…';
-  window.labAPI.onUpdateProgress(({ percent }) => {
-    $('updateProgressFill').style.width = percent + '%';
-    $('updateProgressText').textContent = `下载中 ${percent}%`;
-  });
-  try {
-    const r = await window.labAPI.downloadUpdate({ url: asset.url, name: asset.name });
-    if (r.ok) {
-      $('updateProgressText').textContent = '下载完成';
-      showToast('success', '更新下载完成', '即将打开安装程序', 4000);
-      window.labAPI.openFile(r.filePath);
-      closeModal('updateModal');
-    } else {
-      $('updateProgressText').textContent = '下载失败：' + r.error;
-      showToast('error', '下载失败', r.error, 5000);
-    }
-  } catch (err) {
-    $('updateProgressText').textContent = '下载异常：' + err.message;
-  } finally {
-    updateDownloading = false;
-    $('btnUpdateDownload').disabled = false;
-    $('btnUpdateLater').disabled = false;
-  }
+// ── 贡献数据（变体 / 实验报告，COS 直传）──
+let cvMode = 'variant';            // variant | report
+let cvPhotos = [];                 // [{name, buf, thumb}]
+let cvDocx = null;                 // {name, buf}
+let cvSelections = [];             // [{section, text}]
+
+function cvTs() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-// ── 请勿点击：高危警告多级确认 + 彩蛋音频 ──
+async function openContributeModal() {
+  if (!currentExp) { showToast('warning', '请先选择实验', '从左侧选择一个实验后再贡献'); return; }
+  cvMode = 'variant';
+  cvPhotos = [];
+  cvDocx = null;
+  cvSelections = [];
+  $('contributeExpName').textContent = getDisplayName(currentExp);
+  $('cvVariantNote').value = '';
+  $('cvReportScore').value = '';
+  $('cvReportNote').value = '';
+  $('cvUploadStatus').textContent = '';
+  $('chkContributeAgree').checked = false;
+  renderCVPhotos();
+  renderCVDocx();
+  switchCVTab('variant');
+  loadCVVariants();
+  openModal('contributeModal');
+}
+
+function switchCVTab(mode) {
+  cvMode = mode;
+  $('btnCVTabVariant').classList.toggle('active', mode === 'variant');
+  $('btnCVTabReport').classList.toggle('active', mode === 'report');
+  $('cvPaneVariant').style.display = mode === 'variant' ? '' : 'none';
+  $('cvPaneReport').style.display = mode === 'report' ? '' : 'none';
+}
+
+async function loadCVVariants() {
+  const el = $('cvVariantList');
+  let data = null;
+  try {
+    const r = await window.labAPI.readCustomVariants(currentExp.id);
+    if (r.ok) data = r.data;
+  } catch (e) { /* 读取失败按无变体处理 */ }
+  const sections = (data && typeof data === 'object')
+    ? CUSTOM_SECTION_ORDER.filter(s => Array.isArray(data[s]) && data[s].length)
+    : [];
+  if (!sections.length) {
+    el.innerHTML = '<div class="skill-empty">该实验暂无自建变体 —— 先在变体卡片中用 AI 生成新变体并勾选「同时存入自建变体库」。</div>';
+    return;
+  }
+  let html = '';
+  for (const s of sections) {
+    html += `<div class="cv-detail-title"><span>${escapeHtml(s)}</span></div>`;
+    data[s].forEach((text, idx) => {
+      html += `<label class="cv-variant-check"><input type="checkbox" data-section="${escapeHtml(s)}" data-idx="${idx}" />`
+        + `<span class="cv-variant-text">${escapeHtml(String(text).slice(0, 80))}</span></label>`;
+    });
+  }
+  el.innerHTML = html;
+  const collect = () => {
+    cvSelections = [];
+    el.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+      const sec = cb.dataset.section;
+      const idx = parseInt(cb.dataset.idx, 10);
+      if (data[sec] && typeof data[sec][idx] === 'string') {
+        cvSelections.push({ section: sec, text: data[sec][idx] });
+      }
+    });
+  };
+  el.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.onchange = collect; });
+}
+
+// 客户端压缩：最长边 1600px、JPEG 质量 0.8（手机原图压至约 100-300KB）
+async function compressImageFile(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bmp, 0, 0, w, h);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  return { name: file.name, buf, thumb: URL.createObjectURL(blob) };
+}
+
+function renderCVPhotos() {
+  const grid = $('cvPhotoGrid');
+  grid.innerHTML = '';
+  cvPhotos.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'cv-photo-item';
+    div.innerHTML = `<img src="${p.thumb}" alt=""><button class="cv-photo-del" data-i="${i}">×</button>`;
+    div.querySelector('.cv-photo-del').onclick = () => {
+      cvPhotos.splice(i, 1);
+      renderCVPhotos();
+    };
+    grid.appendChild(div);
+  });
+}
+
+function renderCVDocx() {
+  $('cvDocxRow').textContent = cvDocx ? `${cvDocx.name}（${(cvDocx.buf.length / 1024 / 1024).toFixed(1)}MB）` : '未选择文件';
+}
+
+async function handleCVPhotos(fileList) {
+  const files = Array.from(fileList || []);
+  for (const f of files) {
+    if (cvPhotos.length >= 9) { showToast('warning', '最多 9 张', '已忽略超出数量的照片'); break; }
+    try {
+      cvPhotos.push(await compressImageFile(f));
+    } catch (e) {
+      showToast('error', '图片处理失败', f.name + ': ' + e.message, 5000);
+    }
+  }
+  $('cvPhotoInput').value = '';
+  renderCVPhotos();
+}
+
+async function handleCVDocx(fileList) {
+  const f = fileList && fileList[0];
+  if (!f) return;
+  if (f.size > 16 * 1024 * 1024) { showToast('error', '文件过大', 'Word 文档不能超过 16MB'); $('cvDocxInput').value = ''; return; }
+  cvDocx = { name: f.name, buf: new Uint8Array(await f.arrayBuffer()) };
+  $('cvDocxInput').value = '';
+  renderCVDocx();
+}
+
+async function doContributeUpload() {
+  const statusEl = $('cvUploadStatus');
+  if (!currentExp) return;
+  if (!$('chkContributeAgree').checked) { showToast('warning', '请先勾选同意', '阅读并勾选隐私同意后才能上传'); return; }
+  const expId = currentExp.id;
+  const ts = cvTs();
+  const files = [];
+  let kind = 'variant';
+  if (cvMode === 'variant') {
+    if (!cvSelections.length) { showToast('warning', '未选择变体', '请至少勾选一条要贡献的变体'); return; }
+    const obj = {};
+    for (const sel of cvSelections) (obj[sel.section] = obj[sel.section] || []).push(sel.text);
+    const note = $('cvVariantNote').value.trim();
+    if (note) obj['__note'] = note;   // 备注随包附带，仅开发者可见
+    files.push({ name: `自建变体_${expId}.json`, data: new TextEncoder().encode(JSON.stringify(obj, null, 1)), contentType: 'application/json' });
+  } else {
+    kind = 'report';
+    const score = $('cvReportScore').value.trim();
+    if (!/^\d+(\.\d+)?$/.test(score)) { showToast('warning', '请填写分数', '报告分数为必填数字（如 95）'); return; }
+    if (!cvPhotos.length && !cvDocx) { showToast('warning', '没有可上传内容', '请至少选择一张照片或一个 Word 文档'); return; }
+    const prefix = `${expId}-${score}-${ts}`;
+    cvPhotos.forEach((p, i) => files.push({ name: `${prefix}_${i + 1}.jpg`, data: p.buf, contentType: 'image/jpeg' }));
+    if (cvDocx) files.push({ name: `${prefix}.docx`, data: cvDocx.buf, contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    files.push({
+      name: 'manifest.json',
+      data: new TextEncoder().encode(JSON.stringify({
+        kind: 'report', exp: expId, score, ts, note: $('cvReportNote').value.trim(), appVersion: (await window.labAPI.getAppVersion()) || '',
+      }, null, 1)),
+      contentType: 'application/json',
+    });
+  }
+  const baseKey = `contributions/${cvMode === 'variant' ? 'variants' : 'reports'}/${expId}/${ts}`;
+  const items = files.map(f => ({ name: f.name, key: `${baseKey}/${f.name}` }));
+  statusEl.textContent = '正在获取上传凭证…';
+  const c = await window.labAPI.contributeGetCredentials({ keys: items.map(x => x.key) });
+  if (!c.ok || !Array.isArray(c.items) || !c.items.length) {
+    statusEl.textContent = '';
+    showToast('error', '无法上传', (c && c.error) || '凭证服务异常', 5000);
+    return;
+  }
+  const credMap = {};
+  c.items.forEach(it => { credMap[it.key] = it.putUrl; });
+  let done = 0;
+  const failed = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const file = files[i];
+    statusEl.textContent = `上传中 ${done + 1}/${items.length}（${item.name}）`;
+    const putUrl = credMap[item.key];
+    if (!putUrl) { failed.push(item.name + ': 缺少凭证'); continue; }
+    const r = await window.labAPI.contributeUpload({ putUrl, data: file.data, contentType: file.contentType });
+    if (r.ok) done += 1;
+    else failed.push(item.name + ': ' + r.error);
+  }
+  if (done === items.length) {
+    statusEl.textContent = '✓ 上传完成，感谢您的贡献！';
+    showToast('success', '贡献成功', '已上传，等待开发者审核');
+    if (cvMode === 'report') {
+      cvPhotos = [];
+      cvDocx = null;
+      $('cvReportScore').value = '';
+      $('cvReportNote').value = '';
+      renderCVPhotos();
+      renderCVDocx();
+    }
+  } else if (done > 0) {
+    statusEl.textContent = `部分上传失败（${failed.length} 个）`;
+    showToast('warning', '部分上传失败', failed.join('；'), 6000);
+  } else {
+    statusEl.textContent = '';
+    showToast('error', '上传失败', failed.join('；'), 5000);
+  }
+}
 let dangerStep = 0;          // 0 一级 / 1 二级 / 2 三级
 let dangerAudio = null;      // 当前 Audio 对象（防止 GC 中断播放）
 
