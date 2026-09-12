@@ -23,8 +23,10 @@
     {
      "key": "ki_th",
      "label": "电流常数 Ki 理论值",
-     "type": "number",
+     "type": "science",
      "unit": "A/mm",
+     "expDefault": -9,
+     "expSuggestions": [-6, -7, -8, -9, -10, -11, -12],
      "default": 2.7e-09,
      "required": true
     },

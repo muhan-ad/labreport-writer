@@ -130,10 +130,40 @@ async function init() {
   experiments.forEach(e => { e.category = getCategory(e.name); });
 
   updateCategoryCounts();
+  applyDevUi();
   renderList();
   updateEmptyStats();
   updateStudentDisplay();
   bindEvents();
+}
+
+// ── 开发者调试模式 ──
+function isDevMode() {
+  return !!loadSettings().developerMode;
+}
+
+// 应用开发者模式 UI：开关切换时 / 启动时调用
+function applyDevUi() {
+  const dev = isDevMode();
+  const devEls = ['btnBatch', 'btnQueuePanel', 'btnSelectAll', 'btnOpenData', 'btnOpenData2'];
+  devEls.forEach(id => {
+    const el = $(id);
+    if (el) el.style.display = dev ? '' : 'none';
+  });
+  if (!dev) selectedIds.clear();   // 关闭调试模式时清空选中，避免残留状态
+}
+
+function setDevMode(on) {
+  const s = loadSettings();
+  s.developerMode = !!on;
+  saveSettings(s);
+  applyDevUi();
+  renderList();
+  showToast('success', '已切换', on ? '开发者调试模式已开启' : '已回到普通模式', 3000);
+}
+
+function loadDevelopPane() {
+  $('chkDevelopMode').checked = isDevMode();
 }
 
 // ── 分类计数 ──
@@ -176,19 +206,24 @@ function renderList(keyword = '') {
     const isSelected = selectedIds.has(exp.id);
     const isActive = currentExp && currentExp.id === exp.id;
     li.className = 'exp-item' + (isActive ? ' active' : '') + (isSelected ? ' selected' : '');
-    li.innerHTML = `
-      <div class="exp-checkbox ${isSelected ? 'checked' : ''}" data-id="${exp.id}">
+    const checkboxHtml = isDevMode()
+      ? `<div class="exp-checkbox ${isSelected ? 'checked' : ''}" data-id="${exp.id}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-      </div>
+      </div>`
+      : '';
+    li.innerHTML = checkboxHtml + `
       <span class="exp-dot ${exp.hasReport ? 'done' : ''}"></span>
       <span class="exp-name">${getDisplayName(exp)}</span>
       <span class="exp-cat">${CATEGORY_NAMES[exp.category].slice(0, 2)}</span>
     `;
-    // checkbox 点击只切换选中，不打开详情
-    li.querySelector('.exp-checkbox').onclick = (e) => {
-      e.stopPropagation();
-      toggleSelect(exp.id);
-    };
+    // checkbox 点击只切换选中，不打开详情（开发者模式才有）
+    const cb = li.querySelector('.exp-checkbox');
+    if (cb) {
+      cb.onclick = (e) => {
+        e.stopPropagation();
+        toggleSelect(exp.id);
+      };
+    }
     li.onclick = () => selectExperiment(exp);
     list.appendChild(li);
   }
@@ -468,6 +503,7 @@ async function loadExperimentData(exp) {
     $('dataTableWrap').innerHTML = '<div class="data-table-empty">该实验尚未迁移，暂不能在应用内填写</div>';
     $('sheetTabs').style.display = 'none';
     $('btnClearFormData').disabled = true;
+    $('btnFillDefaultData').disabled = true;
   }
 }
 
@@ -475,9 +511,28 @@ async function loadFormData(exp) {
   let result = { ok: false, data: null };
   try { result = await window.labAPI.readData(exp.path); } catch (e) { /* 忽略 */ }
   currentData = (result.ok && result.data) ? result.data : {};
+  // schema 默认值只在"数据文件中缺失该字段"时回填一次；
+  // 渲染层不再 fallback default，保证「清除数据」置空后不会被默认值恢复
+  for (const group of (currentSchema?.groups || [])) {
+    for (const fld of (group.fields || [])) {
+      if (currentData[fld.key] !== undefined) continue;
+      if (fld.type === 'array') {
+        currentData[fld.key] = Array.isArray(fld.default)
+          ? fld.default
+          : new Array(fld.length || 0).fill(null);
+      } else if (fld.type === 'matrix') {
+        currentData[fld.key] = Array.isArray(fld.default)
+          ? fld.default
+          : Array.from({ length: fld.rows || 0 }, () => new Array(fld.cols || 0).fill(null));
+      } else {
+        currentData[fld.key] = fld.default !== undefined ? fld.default : null;
+      }
+    }
+  }
   isDataModified = false;
   $('btnSaveData').disabled = true;
   $('btnClearFormData').disabled = false;
+  $('btnFillDefaultData').disabled = false;
   notifyDataModified();
   $('sheetTabs').style.display = 'none';   // 表单模式无 sheet 切换
   $('dataIssueBar').style.display = 'none';
@@ -508,6 +563,34 @@ function clearFormData() {
   showToast('info', '已清除', '全部字段已置空，填写后请点击「保存修改」');
 }
 
+// 填入默认数据：整表重置为 schema 默认值（需二次确认，防止覆盖已填数据）
+function fillDefaultData() {
+  if (!currentSchema || !currentExp) return;
+  if (!confirm('将当前实验表单整表重置为默认数据？\n您已填写的字段将被默认值覆盖！')) return;
+  if (!confirm('最后确认：重置后当前填写内容将丢失，确定继续？')) return;
+  for (const group of (currentSchema.groups || [])) {
+    for (const fld of (group.fields || [])) {
+      if (fld.type === 'array') {
+        currentData[fld.key] = Array.isArray(fld.default)
+          ? fld.default.slice()
+          : new Array(fld.length || 0).fill(null);
+      } else if (fld.type === 'matrix') {
+        currentData[fld.key] = Array.isArray(fld.default)
+          ? fld.default.map(r => r.slice())
+          : Array.from({ length: fld.rows || 0 }, () => new Array(fld.cols || 0).fill(null));
+      } else {
+        currentData[fld.key] = fld.default !== undefined ? fld.default : null;
+      }
+    }
+  }
+  renderForm();
+  isDataModified = true;
+  notifyDataModified();
+  $('btnSaveData').disabled = false;
+  refreshFormCheck();
+  showToast('success', '已填入', '全表已恢复为默认数据，点击「保存修改」后生效');
+}
+
 function renderForm() {
   const wrap = $('dataTableWrap');
   if (!currentSchema) { wrap.innerHTML = ''; return; }
@@ -535,10 +618,33 @@ function renderField(fld) {
   const hasVal = (v) => v !== null && v !== undefined && v !== '';
 
   if (fld.type === 'number') {
-    const v = hasVal(val) ? val : (fld.default !== undefined ? fld.default : '');
+    const v = hasVal(val) ? val : '';   // 无默认回退：清除后保持空白（默认值已在 loadFormData 阶段填入）
     return `<div class="form-field form-field-number">`
       + `<label class="field-label">${label}</label>`
       + `<input type="number" step="any" class="field-input" data-key="${escapeHtml(key)}" value="${escapeHtml(v)}">`
+      + unit + `</div>`;
+  }
+  if (fld.type === 'science') {
+    // 科学计数法双框：尾数 × 10^指数（指数可自由输入，附预设建议，默认 expDefault）
+    let mantissa = '';
+    let exp = fld.expDefault !== undefined ? fld.expDefault : -9;
+    if (hasVal(val)) {
+      const num = Number(val);
+      if (isFinite(num) && num !== 0) {
+        exp = Math.floor(Math.log10(Math.abs(num)));
+        mantissa = parseFloat((num / Math.pow(10, exp)).toPrecision(10));
+      } else {
+        mantissa = num;
+      }
+    }
+    const suggs = Array.isArray(fld.expSuggestions) ? fld.expSuggestions : [-6, -7, -8, -9, -10, -11, -12];
+    const dl = suggs.map(e => `<option value="${e}">10^${e}</option>`).join('');
+    return `<div class="form-field form-field-science">`
+      + `<label class="field-label">${label}</label>`
+      + `<input type="number" step="any" class="field-input science-mantissa" data-key="${escapeHtml(key)}" value="${escapeHtml(mantissa)}" placeholder="有效数字">`
+      + `<span class="sci-times">× 10^</span>`
+      + `<input type="number" step="1" class="field-input science-exp" data-key="${escapeHtml(key)}" value="${exp}" list="sciExp_${escapeHtml(key)}">`
+      + `<datalist id="sciExp_${escapeHtml(key)}">${dl}</datalist>`
       + unit + `</div>`;
   }
   if (fld.type === 'array') {
@@ -601,6 +707,12 @@ function readFormData() {
       if (fld.type === 'number') {
         const inp = document.querySelector(`input[data-key="${key}"]:not([data-idx]):not([data-row])`);
         data[key] = (inp && inp.value !== '') ? parseFloat(inp.value) : null;
+      } else if (fld.type === 'science') {
+        const m = document.querySelector(`input.science-mantissa[data-key="${key}"]`);
+        const e = document.querySelector(`input.science-exp[data-key="${key}"]`);
+        const mv = (m && m.value !== '') ? parseFloat(m.value) : NaN;
+        const ev = (e && e.value !== '') ? parseInt(e.value, 10) : 0;
+        data[key] = (isFinite(mv) && isFinite(ev)) ? mv * Math.pow(10, ev) : null;
       } else if (fld.type === 'array') {
         const inputs = document.querySelectorAll(`input[data-key="${key}"][data-idx]`);
         data[key] = Array.from(inputs).map(i => i.value !== '' ? parseFloat(i.value) : null);
@@ -1126,16 +1238,9 @@ const POPULAR_MODELS = {
     { name: 'deepseek-v4-flash', desc: '快速版' },
     { name: 'deepseek-chat', desc: '旧版兼容' },
   ],
-  doubao: [
-    { name: 'doubao-seed-2-1-pro-260628', desc: '最新旗舰' },
-    { name: 'doubao-seed-2-1-turbo-260628', desc: '性价比' },
-    { name: 'doubao-seed-2-0-pro-260215', desc: '2.0旗舰' },
-  ],
-  qwen: [
-    { name: 'qwen-plus', desc: '均衡型' },
-    { name: 'qwen-max', desc: '旗舰型' },
-    { name: 'qwen3.8-max', desc: '最新旗舰' },
-    { name: 'qwen-flash', desc: '快速版' },
+  mimo: [
+    { name: 'MiMo-VL-7B-RL', desc: '视觉理解' },
+    { name: 'MiMo-Flash-Preview', desc: '快速版' },
   ],
   custom: [
     { name: 'gpt-4o', desc: 'GPT-4o' },
@@ -1146,9 +1251,8 @@ const POPULAR_MODELS = {
 
 // 各平台默认 API URL
 const DEFAULT_API_URLS = {
-  deepseek: 'https://api.deepseek.com/v1',
-  doubao: 'https://ark.cn-beijing.volces.com/api/v3',
-  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  deepseek: 'https://api.deepseek.com',
+  mimo: 'https://api.xiaomimimo.com/v1',
   custom: '',
 };
 
@@ -1298,12 +1402,17 @@ function bindEvents() {
   // 设置
   $('btnSettings').onclick = () => { openModal('settingsModal'); loadSettingsForm(); switchSettingsPane('ai'); };
   $('btnNavAi').onclick = () => switchSettingsPane('ai');
+  $('btnNavSkills').onclick = () => { switchSettingsPane('skills'); loadSkillList(); };
   $('btnNavReports').onclick = () => { switchSettingsPane('reports'); loadReportsList(); };
   $('btnRefreshReports').onclick = loadReportsList;
   $('btnNavHelp').onclick = () => switchSettingsPane('help');
   $('btnNavDanger').onclick = () => switchSettingsPane('danger');
   $('btnNavUpdate').onclick = () => { switchSettingsPane('update'); loadUpdatePane(); };
+  $('btnNavDevelop').onclick = () => { switchSettingsPane('develop'); loadDevelopPane(); };
+  $('chkDevelopMode').onchange = (e) => setDevMode(e.target.checked);
+  $('btnFillDefaultData').onclick = fillDefaultData;
   $('btnCheckUpdate').onclick = checkForUpdate;
+  $('btnCheckDataUpdate').onclick = checkDataUpdate;
   $('btnUpdateDownload').onclick = downloadUpdate;
   $('btnUpdateLater').onclick = () => {
     if (updateDownloading) window.labAPI.cancelUpdateDownload();
@@ -1439,12 +1548,16 @@ function saveStudent() {
 function switchSettingsPane(name) {
   $('btnNavAi').classList.toggle('active', name === 'ai');
   $('paneAi').classList.toggle('active', name === 'ai');
+  $('btnNavSkills').classList.toggle('active', name === 'skills');
+  $('paneSkills').classList.toggle('active', name === 'skills');
   $('btnNavReports').classList.toggle('active', name === 'reports');
   $('paneReports').classList.toggle('active', name === 'reports');
   $('btnNavHelp').classList.toggle('active', name === 'help');
   $('paneHelp').classList.toggle('active', name === 'help');
   $('btnNavDanger').classList.toggle('active', name === 'danger');
   $('paneDanger').classList.toggle('active', name === 'danger');
+  $('btnNavDevelop').classList.toggle('active', name === 'develop');
+  $('paneDevelop').classList.toggle('active', name === 'develop');
   $('btnNavUpdate').classList.toggle('active', name === 'update');
   $('paneUpdate').classList.toggle('active', name === 'update');
 }
@@ -1458,6 +1571,84 @@ function loadUpdatePane() {
   window.labAPI.getAppVersion().then(v => {
     $('inputCurrentVersion').textContent = 'v' + v;
   }).catch(() => { $('inputCurrentVersion').textContent = '未知'; });
+  loadDataInfo();
+}
+
+// ── 实验数据热更新 ──
+async function loadDataInfo() {
+  const el = $('dataVersionText');
+  if (!el) return;
+  try {
+    const r = await window.labAPI.getDataInfo();
+    if (r.ok) {
+      el.textContent = r.localVersion ? ('v' + r.localVersion) : ('v' + r.builtinVersion + '（内置）');
+    } else {
+      el.textContent = '未知';
+    }
+  } catch (e) { el.textContent = '未知'; }
+}
+
+async function checkDataUpdate() {
+  const btn = $('btnCheckDataUpdate');
+  const result = $('dataUpdateResult');
+  btn.disabled = true;
+  btn.textContent = '检查中…';
+  result.textContent = '正在连接更新服务器…';
+  try {
+    const r = await window.labAPI.checkDataUpdate();
+    if (!r.ok) {
+      result.textContent = '检查失败：' + r.error;
+      return;
+    }
+    if (!r.hasUpdate) {
+      result.textContent = '实验数据已是最新（v' + r.localVersion + '）';
+      return;
+    }
+    const ok = confirm(
+      `发现实验数据新版本 v${r.remoteVersion}（当前 v${r.localVersion}）\n\n${r.notes || '（无更新说明）'}\n\n是否立即下载并更新？\n更新不会覆盖您已填写的测量数据。`
+    );
+    if (!ok) {
+      result.textContent = `已取消（新版本 v${r.remoteVersion} 待更新）`;
+      return;
+    }
+    result.textContent = '正在下载数据包…';
+    window.labAPI.onDataProgress(({ percent }) => {
+      result.textContent = `正在下载数据包 ${percent}%`;
+    });
+    const dl = await window.labAPI.downloadDataPackage({ url: r.url });
+    if (!dl.ok) {
+      result.textContent = '下载失败：' + dl.error;
+      return;
+    }
+    result.textContent = '正在应用更新…';
+    const ap = await window.labAPI.applyDataPackage({
+      filePath: dl.filePath,
+      version: r.remoteVersion,
+      notes: r.notes,
+    });
+    if (!ap.ok) {
+      result.textContent = '更新失败：' + ap.error;
+      return;
+    }
+    if (ap.warnings && ap.warnings.length) {
+      showToast('info', '数据更新完成', ap.warnings.join('；'), 6000);
+    } else {
+      showToast('success', '数据更新完成', `实验数据已更新到 v${r.remoteVersion}`, 4000);
+    }
+    result.textContent = `已更新到 v${r.remoteVersion}`;
+    // 重新扫描实验（热更新后的实验列表与资源入口）
+    experiments = await window.labAPI.scanExperiments();
+    experiments.forEach(e => { e.category = getCategory(e.name); });
+    updateCategoryCounts();
+    renderList();
+    updateEmptyStats();
+    loadDataInfo();
+  } catch (err) {
+    result.textContent = '检查失败：' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '检查实验数据更新';
+  }
 }
 
 async function checkForUpdate() {
@@ -1729,6 +1920,14 @@ async function importPolishAndRegenerate() {
 
 function loadSettingsForm() {
   const s = loadSettings();
+  // 旧版本曾提供豆包/通义千问，现已下架：存量设置自动重置为 DeepSeek
+  if (s.provider === 'doubao' || s.provider === 'qwen') {
+    s.provider = 'deepseek';
+    s.model = '';
+    s.apiUrl = '';
+    saveSettings(s);
+    showToast('info', '供应商已更新', '豆包/通义千问已下架，AI 服务已重置为 DeepSeek，请重新配置', 6000);
+  }
   $('selectProvider').value = s.provider || 'deepseek';
   $('inputApiKey').value = s.apiKey || '';
   $('inputModel').value = s.model || '';

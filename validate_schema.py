@@ -59,7 +59,7 @@ def validate(schema, data):
                 continue
 
             # 类型 / 长度检查
-            if typ == "number":
+            if typ in ("number", "science"):
                 if not _is_num(v):
                     invalid.append({"key": key, "label": label, "reason": "应为数值"})
             elif typ == "array":

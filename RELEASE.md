@@ -24,6 +24,37 @@
    ```
 5. 完成。用户应用内「设置 → 检查更新」→ 自动发现新版本 → 自动下载 → 自动打开安装程序。
 
+## 实验数据热更新（改变体/知识库/新增实验，无需重装）
+
+实验数据（约 0.7MB 的 zip）与安装包（约 164MB）分开更新：
+
+1. **打包数据包**（在项目根目录执行）：
+   ```bash
+   python -c "import os,sys,zipfile,json; ROOT=os.getcwd(); SRC=os.path.join(ROOT,'物理实验','实验脚本'); DIST=os.path.join(ROOT,'dist'); VER=json.load(open('package.json',encoding='utf-8'))['version']; zp=os.path.join(DIST,f'data-package-{VER}.zip'); c=0
+   import io
+   zf=zipfile.ZipFile(zp,'w',zipfile.ZIP_DEFLATED)
+   for dp,dn,fns in os.walk(os.path.realpath(SRC)):
+       dn[:]=[d for d in dn if d!='__pycache__']
+       for fn in fns:
+           if fn.lower().endswith(('.docx','.png','.xlsx','.xls','.pdf')) or fn=='.lab_sections.json': continue
+           full=os.path.realpath(os.path.join(dp,fn))
+           if not full.startswith(os.path.realpath(SRC)+os.sep): raise SystemExit('越界')
+           zf.writestr(os.path.join('实验脚本',os.path.relpath(full,os.path.realpath(SRC))),open(full,'rb').read()); c+=1
+   zf.close(); print(zp, c)"
+   ```
+   （产物为 `dist/data-package-<版本>.zip`，约 0.7MB）
+2. **更新清单** `data-manifest.json`（同桶，覆盖上传）：
+   ```json
+   {
+     "dataVersion": "1.5.0",
+     "notes": "本次实验数据更新说明",
+     "url": "https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/data-package-1.5.0.zip"
+   }
+   ```
+3. 用户应用内「设置 → 检查更新 → 检查实验数据更新」→ 下载 → 应用，**无需重装应用**。
+
+合并规则：用户的测量数据 `data.json` 永不覆盖；用户改过的 `variants.json` 保留本地版本；公共库、原理知识库、脚本直接更新。
+
 ## 首次配置（一次性）
 
 应用「设置 → 检查更新」→ 填写 `latest.json` 的完整 URL（须为公网 http/https 地址，

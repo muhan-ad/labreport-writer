@@ -190,33 +190,56 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// ── 实验数据目录（热更新支持）──
+// 数据包下载解压到 userData，扫描时 userData 有有效清单则优先于安装目录（同名实验以 userData 为准）
+function getDataRoots() {
+  const udRoot = path.join(app.getPath('userData'), '实验数据', '实验脚本');
+  const mfPath = path.join(app.getPath('userData'), '实验数据', 'data-manifest.json');
+  const roots = [];
+  if (fs.existsSync(mfPath) && fs.existsSync(udRoot)) {
+    roots.push({ dir: udRoot, source: 'userData' });
+  }
+  if (fs.existsSync(EXPERIMENTS_DIR)) {
+    roots.push({ dir: EXPERIMENTS_DIR, source: 'builtin' });
+  }
+  return { roots, udRoot, mfPath };
+}
+
+function scanDirEntry(d, source) {
+  const expPath = path.join(d.dir, d.name);
+  const generatePy = path.join(expPath, 'generate.py');
+  if (!fs.existsSync(generatePy)) return null;
+  const files = fs.readdirSync(expPath);
+  const hasDataJson = files.includes('data.json');
+  const hasSchemaJson = files.includes('schema.json');
+  const docx = files.find(f => f.endsWith('.docx') && !f.startsWith('~$') && !f.includes('.~saving'));
+  return {
+    id: d.name,
+    name: d.name,
+    path: expPath,
+    hasData: hasDataJson || hasSchemaJson,
+    hasReport: !!docx,
+    dataFile: hasDataJson
+      ? path.join(expPath, 'data.json')
+      : (hasSchemaJson ? path.join(expPath, 'schema.json') : null),
+    reportFile: docx ? path.join(expPath, docx) : null,
+    source,
+  };
+}
+
 // ── IPC: 扫描实验列表 ──
 ipcMain.handle('scan-experiments', () => {
+  const { roots } = getDataRoots();
   const results = [];
-  if (!fs.existsSync(EXPERIMENTS_DIR)) return results;
-  const dirs = fs.readdirSync(EXPERIMENTS_DIR, { withFileTypes: true });
-  for (const d of dirs) {
-    if (!d.isDirectory() || d.name === 'common') continue;
-    const expPath = path.join(EXPERIMENTS_DIR, d.name);
-    const generatePy = path.join(expPath, 'generate.py');
-    if (!fs.existsSync(generatePy)) continue;
-    const files = fs.readdirSync(expPath);
-    // 方式三：数据真相为 data.json / schema.json（xlsx 为遗留模板，不再参与判定）
-    const hasDataJson = files.includes('data.json');
-    const hasSchemaJson = files.includes('schema.json');
-    // 跳过 Word 属主文件（~$开头）与生成中的临时报告（.~saving）
-    const docx = files.find(f => f.endsWith('.docx') && !f.startsWith('~$') && !f.includes('.~saving'));
-    results.push({
-      id: d.name,
-      name: d.name,
-      path: expPath,
-      hasData: hasDataJson || hasSchemaJson,
-      hasReport: !!docx,
-      dataFile: hasDataJson
-        ? path.join(expPath, 'data.json')
-        : (hasSchemaJson ? path.join(expPath, 'schema.json') : null),
-      reportFile: docx ? path.join(expPath, docx) : null,
-    });
+  const seen = new Set();
+  for (const root of roots) {
+    let dirs = [];
+    try { dirs = fs.readdirSync(root.dir, { withFileTypes: true }); } catch (e) { continue; }
+    for (const d of dirs) {
+      if (!d.isDirectory() || d.name === 'common' || d.name.startsWith('.') || seen.has(d.name)) continue;
+      const entry = scanDirEntry({ dir: root.dir, name: d.name }, root.source);
+      if (entry) { seen.add(d.name); results.push(entry); }
+    }
   }
   results.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   return results;
@@ -382,19 +405,31 @@ ipcMain.handle('open-skills-folder', () => {
 ipcMain.handle('list-reports', () => {
   const out = [];
   try {
-    if (!fs.existsSync(EXPERIMENTS_DIR)) return { ok: true, reports: out };
-    const dirs = fs.readdirSync(EXPERIMENTS_DIR, { withFileTypes: true });
-    for (const d of dirs) {
-      if (!d.isDirectory() || d.name === 'common') continue;
-      const expPath = path.join(EXPERIMENTS_DIR, d.name);
-      let files;
-      try { files = fs.readdirSync(expPath); } catch (e) { continue; }
-      for (const f of files) {
-        if (!f.toLowerCase().endsWith('.docx') || f.startsWith('~$') || f.includes('.~saving')) continue;
-        try {
-          const st = fs.statSync(path.join(expPath, f));
-          out.push({ exp: d.name, file: f, path: path.join(expPath, f), size: st.size, mtime: st.mtimeMs });
-        } catch (e) { /* 单个文件异常跳过 */ }
+    const { roots } = getDataRoots();
+    if (!roots.length) return { ok: true, reports: out };
+    const seen = new Set();
+    for (const root of roots) {
+      if (root.source === 'userData') {
+        // userData 优先：与其同名的实验直接跳过安装目录版本，避免重复
+        for (const d of fs.readdirSync(root.dir, { withFileTypes: true })) {
+          if (d.isDirectory()) seen.add(d.name);
+        }
+      }
+      let dirs = [];
+      try { dirs = fs.readdirSync(root.dir, { withFileTypes: true }); } catch (e) { continue; }
+      for (const d of dirs) {
+        if (!d.isDirectory() || d.name === 'common' || d.name.startsWith('.')) continue;
+        if (root.source === 'builtin' && seen.has(d.name)) continue;
+        const expPath = path.join(root.dir, d.name);
+        let files;
+        try { files = fs.readdirSync(expPath); } catch (e) { continue; }
+        for (const f of files) {
+          if (!f.toLowerCase().endsWith('.docx') || f.startsWith('~$') || f.includes('.~saving')) continue;
+          try {
+            const st = fs.statSync(path.join(expPath, f));
+            out.push({ exp: d.name, file: f, path: path.join(expPath, f), size: st.size, mtime: st.mtimeMs });
+          } catch (e) { /* 单个文件异常跳过 */ }
+        }
       }
     }
     out.sort((a, b) => b.mtime - a.mtime);
@@ -409,9 +444,13 @@ ipcMain.handle('delete-report', (_, filePath) => {
   try {
     if (typeof filePath !== 'string' || !filePath) return { ok: false, error: '无效路径' };
     const p = path.resolve(filePath);
-    const root = path.resolve(EXPERIMENTS_DIR);
+    const { roots } = getDataRoots();
     if (!p.toLowerCase().endsWith('.docx')) return { ok: false, error: '仅允许删除 .docx 报告' };
-    if (p !== root && !p.startsWith(root + path.sep)) return { ok: false, error: '仅允许删除实验目录内的报告' };
+    const inside = roots.some(r => {
+      const root = path.resolve(r.dir);
+      return p !== root && p.startsWith(root + path.sep);
+    });
+    if (!inside) return { ok: false, error: '仅允许删除实验目录内的报告' };
     if (!fs.existsSync(p)) return { ok: true, alreadyGone: true };
     fs.unlinkSync(p);
     return { ok: true };
@@ -470,6 +509,238 @@ ipcMain.handle('read-audio-file', () => {
     if (!fs.existsSync(filePath)) return { ok: false, error: '音频文件不存在' };
     const buffer = fs.readFileSync(filePath);
     return { ok: true, mime: 'audio/mpeg', data: buffer.toString('base64') };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// ═══════════════════════════════════════════════
+// 实验数据热更新（COS 数据包 → userData，免重装）
+// ═══════════════════════════════════════════════
+const DATA_MANIFEST_URL = 'https://labreport-1485394950.cos.ap-guangzhou.myqcloud.com/data-manifest.json';
+
+function readLocalDataManifest() {
+  try {
+    return JSON.parse(fs.readFileSync(getDataRoots().mfPath, 'utf-8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+// 路径边界断言：p 必须位于 root 内
+function ensureInside(p, root) {
+  const rp = path.resolve(p);
+  const rr = path.resolve(root);
+  if (rp !== rr && !rp.startsWith(rr + path.sep)) throw new Error('路径越界: ' + p);
+  return rp;
+}
+
+// ── IPC: 实验数据版本信息（本地）
+ipcMain.handle('get-data-info', () => {
+  const mf = readLocalDataManifest();
+  return {
+    ok: true,
+    localVersion: (mf && mf.dataVersion) || null,   // 无热更新数据时为空，即内置版本
+    notes: (mf && mf.notes) || '',
+    updatedAt: (mf && mf.updatedAt) || null,
+    builtinVersion: app.getVersion(),
+  };
+});
+
+// ── IPC: 检查实验数据更新（远端 data-manifest.json）
+ipcMain.handle('check-data-update', async () => {
+  try {
+    const u = assertPublicUrl(DATA_MANIFEST_URL);
+    if (!(await checkPublicDns(u.hostname))) throw new Error('更新地址无法解析或指向本地地址');
+    const mf = await httpsGetJson(u.href);
+    const remote = String(mf.dataVersion || '').replace(/^v/i, '');
+    const local = readLocalDataManifest();
+    const localVer = local ? String(local.dataVersion).replace(/^v/i, '') : app.getVersion();
+    const hasUpdate = !!(remote && compareVersions(remote, localVer) > 0);
+    return {
+      ok: true,
+      hasUpdate,
+      localVersion: localVer,
+      remoteVersion: remote,
+      notes: String(mf.notes || '').trim(),
+      url: String(mf.url || '').trim(),
+    };
+  } catch (err) {
+    return { ok: false, error: err.message, hasUpdate: false };
+  }
+});
+
+// ── IPC: 下载实验数据包（zip，进度经 'data-update-progress' 回传）
+let activeDataReq = null;
+ipcMain.handle('download-data-package', async (event, payload) => {
+  const rawUrl = String((payload && payload.url) || '');
+  let url;
+  try {
+    const u = assertPublicUrl(rawUrl);
+    if (!(await checkPublicDns(u.hostname))) throw new Error('下载地址无法解析或指向本地地址');
+    url = u.href;
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  const dataRoot = path.join(app.getPath('userData'), '实验数据');
+  fs.mkdirSync(dataRoot, { recursive: true });
+  const dest = ensureInside(path.join(dataRoot, '_package.zip'), dataRoot);
+  const sendProgress = (percent) => {
+    try { event.sender.send('data-update-progress', { percent }); } catch (e) { /* 忽略 */ }
+  };
+  return new Promise((resolve) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'labreport-writer-updater' } }, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        activeDataReq = null;
+        return resolve({ ok: false, error: `下载失败 HTTP ${res.statusCode}` });
+      }
+      const total = parseInt(res.headers['content-length'] || '0', 10) || 0;
+      let received = 0;
+      const out = fs.createWriteStream(dest);
+      res.pipe(out);
+      res.on('data', (chunk) => {
+        received += chunk.length;
+        if (total) sendProgress(Math.min(95, Math.round(received * 100 / total)));
+      });
+      out.on('finish', () => { activeDataReq = null; sendProgress(100); resolve({ ok: true, filePath: dest }); });
+      out.on('error', (e) => { activeDataReq = null; res.destroy(); resolve({ ok: false, error: e.message }); });
+      res.on('error', (e) => { activeDataReq = null; out.destroy(); resolve({ ok: false, error: e.message }); });
+    });
+    req.on('error', (e) => { activeDataReq = null; resolve({ ok: false, error: e.message }); });
+    activeDataReq = req;
+  });
+});
+
+ipcMain.on('cancel-data-download', () => {
+  if (activeDataReq) {
+    try { activeDataReq.destroy(); } catch (e) { /* 忽略 */ }
+    activeDataReq = null;
+  }
+});
+
+// 用内置 Python 安全解压 zip（条目路径校验防 zip-slip）
+const UNZIP_SCRIPT = [
+  'import sys, zipfile',
+  'z, dest = sys.argv[1], sys.argv[2]',
+  "with zipfile.ZipFile(z) as zf:",
+  "    for n in zf.namelist():",
+  "        p = n.replace(chr(92), '/')",
+  "        if p.startswith('/') or any(s == '..' for s in p.split('/')):",
+  "            raise SystemExit('bad entry: ' + n)",
+  '    zf.extractall(dest)',
+].join('\n');
+
+function unzipSafe(zipPath, destDir) {
+  return new Promise((resolve, reject) => {
+    const pythonExe = resolvePythonExe();
+    if (!pythonExe) return reject(new Error('未找到内置 Python 运行时'));
+    const proc = spawn(pythonExe, ['-c', UNZIP_SCRIPT, zipPath, destDir]);
+    let errOut = '';
+    proc.stderr.on('data', (d) => { errOut += d.toString(); });
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error('解压失败：' + errOut.trim().slice(-300)));
+    });
+  });
+}
+
+function copyDir(src, dest, boundRoot) {
+  ensureInside(src, boundRoot);
+  ensureInside(dest, boundRoot);
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of fs.readdirSync(src)) {
+    const s = ensureInside(path.join(src, name), boundRoot);
+    const d = ensureInside(path.join(dest, name), boundRoot);
+    const st = fs.statSync(s);
+    if (st.isDirectory()) copyDir(s, d, boundRoot);
+    else fs.copyFileSync(s, d);
+  }
+}
+
+// 递归合并数据包目录到 userData：data.json 永不覆盖；variants.json 用户改过则保留
+function mergeDataTree(stagingDir, udRoot, builtinRoot, warnings) {
+  if (!fs.existsSync(stagingDir)) return;
+  for (const entry of fs.readdirSync(stagingDir)) {
+    const src = ensureInside(path.join(stagingDir, entry), stagingDir);
+    const st = fs.statSync(src);
+    const dst = ensureInside(path.join(udRoot, entry), udRoot);
+    if (st.isDirectory()) {
+      if (entry === 'common') {
+        // common 整目录覆盖（公共库，用户不改）
+        fs.rmSync(dst, { recursive: true, force: true });
+        copyDir(src, dst, udRoot);
+        continue;
+      }
+      // 实验目录：先合并文件
+      fs.mkdirSync(dst, { recursive: true });
+      mergeDataTree(src, dst, path.join(builtinRoot, entry), warnings);
+      // data.json 保障：userData 无而安装目录有时，复制安装目录的用户数据
+      const bd = ensureInside(path.join(builtinRoot, entry, 'data.json'), EXPERIMENTS_DIR);
+      const dd = ensureInside(path.join(dst, 'data.json'), udRoot);
+      if (fs.existsSync(bd) && !fs.existsSync(dd)) {
+        fs.copyFileSync(bd, dd);
+      }
+    } else {
+      const name = entry;
+      const dstExists = fs.existsSync(dst);
+      if (name === 'data.json') {
+        if (!dstExists) fs.copyFileSync(src, dst);   // 新实验示例数据允许落盘；已有用户数据永不覆盖
+        continue;
+      }
+      if (name === 'variants.json' && dstExists) {
+        // 用户本地改过（与安装目录原版不同）则保留用户版
+        const builtinV = ensureInside(path.join(builtinRoot, name), EXPERIMENTS_DIR);
+        let userModified = false;
+        try {
+          const a = fs.readFileSync(builtinV, 'utf-8');
+          const b = fs.readFileSync(dst, 'utf-8');
+          userModified = a !== b;
+        } catch (e) {
+          userModified = true;
+        }
+        if (userModified) {
+          warnings.push(`${entry.replace('.json', '')} 的变体已由用户修改，保留本地版本`);
+          continue;
+        }
+      }
+      fs.copyFileSync(src, dst);
+    }
+  }
+}
+
+// ── IPC: 应用数据包（解压 + 合并到 userData + 写 manifest）
+ipcMain.handle('apply-data-package', async (_, payload) => {
+  try {
+    const zipPath = String((payload && payload.filePath) || '');
+    const version = String((payload && payload.version) || '').trim();
+    const notes = String((payload && payload.notes) || '').trim();
+    if (!/\.zip$/i.test(path.basename(zipPath))) return { ok: false, error: '数据包应为 zip 文件' };
+    const dataRoot = path.join(app.getPath('userData'), '实验数据');
+    if (!ensureInside(zipPath, dataRoot)) return { ok: false, error: '无效的数据包路径' };
+    if (!fs.existsSync(zipPath)) return { ok: false, error: '数据包文件不存在' };
+    const { udRoot, mfPath } = getDataRoots();
+    const staging = ensureInside(path.join(dataRoot, '_staging'), dataRoot);
+    fs.rmSync(staging, { recursive: true, force: true });
+    fs.mkdirSync(staging, { recursive: true });
+    await unzipSafe(zipPath, staging);
+    // 包内结构约定：zip 内直接是 实验脚本 树（本目录开头）
+    const warnings = [];
+    const stagingRoot = fs.existsSync(path.join(staging, '实验脚本'))
+      ? path.join(staging, '实验脚本')
+      : staging;
+    mergeDataTree(stagingRoot, udRoot, EXPERIMENTS_DIR, warnings);
+    ensureInside(mfPath, path.join(app.getPath('userData'), '实验数据'));
+    fs.writeFileSync(mfPath, JSON.stringify({
+      dataVersion: version,
+      notes,
+      updatedAt: new Date().toISOString(),
+    }, null, 2), 'utf-8');
+    // 清理
+    fs.rmSync(staging, { recursive: true, force: true });
+    try { fs.unlinkSync(zipPath); } catch (e) { /* 忽略 */ }
+    return { ok: true, warnings };
   } catch (err) {
     return { ok: false, error: err.message };
   }

@@ -2384,3 +2384,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   color: #222;
 }
 #paneUpdate .btn-block { max-width: 240px; margin: 0 auto; }
+
+/* ── 科学计数法双框输入 ── */
+.form-field-science { display: flex; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.form-field-science .field-label { flex: 0 0 auto; margin-right: 8px; }
+.form-field-science .science-mantissa { width: 110px; }
+.form-field-science .science-exp { width: 90px; }
+.form-field-science .sci-times { margin: 0 6px; font-size: 13px; color: var(--text-secondary); }

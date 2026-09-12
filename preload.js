@@ -38,6 +38,15 @@ contextBridge.exposeInMainWorld('labAPI', {
   checkForUpdate: (cfg) => ipcRenderer.invoke('check-for-update', cfg),
   downloadUpdate: (payload) => ipcRenderer.invoke('download-update', payload),
   cancelUpdateDownload: () => ipcRenderer.send('cancel-update-download'),
+  // 实验数据热更新（免重装）
+  getDataInfo: () => ipcRenderer.invoke('get-data-info'),
+  checkDataUpdate: () => ipcRenderer.invoke('check-data-update'),
+  downloadDataPackage: (payload) => ipcRenderer.invoke('download-data-package', payload),
+  applyDataPackage: (payload) => ipcRenderer.invoke('apply-data-package', payload),
+  cancelDataDownload: () => ipcRenderer.send('cancel-data-download'),
+  onDataProgress: (callback) => {
+    ipcRenderer.on('data-update-progress', (_, data) => callback(data));
+  },
   onUpdateProgress: (callback) => {
     ipcRenderer.on('update-download-progress', (_, data) => callback(data));
   },
