@@ -1,5 +1,0 @@
-# 本地工作区与密钥不入库
-.env
-workspace/
-__pycache__/
-*.pyc
