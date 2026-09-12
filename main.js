@@ -253,28 +253,41 @@ function copyDirTo(src, dest, srcRoot, destRoot) {
   }
 }
 
-// 用户数据隔离：写操作前若实验目录仍在安装目录（builtin），先把整目录镜像到 userData 并返回新路径；
-// 此后该实验的读写生成全部走 userData 副本，安装目录保持只读出厂状态
+let lastCommonSyncAt = 0;   // common 公共库上次同步时间（节流）
+
+// 用户数据隔离：写操作前若实验目录仍在安装目录（builtin），先镜像/同步到 userData 并返回新路径。
+// - userData 无该实验：整目录镜像（含 data.json/variants.json 出厂值）
+// - 已有副本：按热更新合并语义刷新（data.json 与用户改过的 variants.json 永不覆盖、报告 docx 不动）
+// - 每次同步公共库 common（generate.py 依赖 from common import *，必须与安装目录同版本）
 function ensureUserCopy(expPath) {
   try {
     const p = path.resolve(expPath);
     const builtinRoot = path.resolve(EXPERIMENTS_DIR);
     const { udRoot } = getDataRoots();
     const udRootRes = path.resolve(udRoot);
+    if (!fs.existsSync(builtinRoot)) return p;
     if (p.startsWith(udRootRes + path.sep)) return p;          // 已在 userData
     if (!p.startsWith(builtinRoot + path.sep)) return p;      // 非安装目录内的路径原样返回
     const name = path.relative(builtinRoot, p).split(path.sep).shift();
     if (!name || name === 'common' || name.startsWith('.')) return p;
-    const dst = path.join(udRootRes, name);
-    if (fs.existsSync(dst)) return dst;                        // 已镜像过
-    fs.mkdirSync(dst, { recursive: true });
-    for (const f of fs.readdirSync(p)) {
-      if (f === '__pycache__' || f.startsWith('~$') || f.includes('.~saving')) continue;
-      const s = ensureInside(path.join(p, f), builtinRoot);
-      const d = ensureInside(path.join(dst, f), udRootRes);
-      const st = fs.statSync(s);
-      if (st.isDirectory()) copyDirTo(s, d, builtinRoot, udRootRes);
-      else fs.copyFileSync(s, d);
+    const src = ensureInside(path.join(builtinRoot, name), builtinRoot);
+    if (!fs.existsSync(src)) return p;
+    const dst = ensureInside(path.join(udRootRes, name), udRootRes);
+    // 同步公共库 common（generate.py 依赖 from common import *；10 分钟节流，进程重启即强制同步，
+    // 保证重装新版本后 common 与 generate.py 匹配）
+    const builtinCommon = ensureInside(path.join(builtinRoot, 'common'), builtinRoot);
+    const udCommon = ensureInside(path.join(udRootRes, 'common'), udRootRes);
+    if (fs.existsSync(builtinCommon) && Date.now() - lastCommonSyncAt > 10 * 60 * 1000) {
+      fs.rmSync(udCommon, { recursive: true, force: true });
+      copyDirTo(builtinCommon, udCommon, builtinRoot, udRootRes);
+      lastCommonSyncAt = Date.now();
+    }
+    if (!fs.existsSync(dst)) {
+      fs.mkdirSync(dst, { recursive: true });
+      copyDirTo(src, dst, builtinRoot, udRootRes);
+    } else {
+      const warnings = [];
+      mergeDataTree(src, dst, src, warnings, true);
     }
     return dst;
   } catch (e) {
@@ -845,7 +858,23 @@ ipcMain.handle('check-data-update', async () => {
   try {
     const u = assertPublicUrl(DATA_MANIFEST_URL);
     if (!(await checkPublicDns(u.hostname))) throw new Error('更新地址无法解析或指向本地地址');
-    const mf = await httpsGetJson(u.href);
+    let mf;
+    try {
+      mf = await httpsGetJson(u.href);
+    } catch (e) {
+      // 云端尚未发布任何数据包（404）：视为已是最新，而非报错
+      if (/HTTP 404/.test(e.message)) {
+        const local = readLocalDataManifest();
+        return {
+          ok: true,
+          hasUpdate: false,
+          noRemote: true,
+          localVersion: local ? String(local.dataVersion).replace(/^v/i, '') : DATA_BUILTIN_VERSION,
+          remoteVersion: '',
+        };
+      }
+      throw e;
+    }
     const remote = String(mf.dataVersion || '').replace(/^v/i, '');
     const local = readLocalDataManifest();
     const localVer = local ? String(local.dataVersion).replace(/^v/i, '') : DATA_BUILTIN_VERSION;
@@ -953,11 +982,13 @@ function copyDir(src, dest, boundRoot) {
 }
 
 // 递归合并数据包目录到 userData：data.json 永不覆盖；variants.json 用户改过则保留
-function mergeDataTree(stagingDir, udRoot, builtinRoot, warnings) {
+// skipDocs=true 时跳过 .docx（供 ensureUserCopy 使用，避免安装目录残留报告覆盖用户报告）
+function mergeDataTree(stagingDir, udRoot, builtinRoot, warnings, skipDocs) {
   if (!fs.existsSync(stagingDir)) return;
   for (const entry of fs.readdirSync(stagingDir)) {
     const src = ensureInside(path.join(stagingDir, entry), stagingDir);
     const st = fs.statSync(src);
+    if (skipDocs && st.isFile() && entry.toLowerCase().endsWith('.docx')) continue;
     const dst = ensureInside(path.join(udRoot, entry), udRoot);
     if (st.isDirectory()) {
       if (entry === 'common') {
@@ -1154,6 +1185,18 @@ ipcMain.handle('check-for-update', async (_, cfg) => {
         if (!(await checkPublicDns(du.hostname))) continue;   // 非法/本地入口直接跳过
         downloads.push({ name, url: du.href, hint: String(d.hint || '').trim() });
       } catch (e) { /* 跳过非法下载入口 */ }
+    }
+    // 兼容旧格式清单（{ url, fileName } 单直链）：downloads 为空时回退构造一个入口
+    if (!downloads.length) {
+      const legacyUrl = String(mf.url || '').trim();
+      if (legacyUrl) {
+        try {
+          const du = assertPublicUrl(legacyUrl);
+          if (await checkPublicDns(du.hostname)) {
+            downloads.push({ name: '安装包直链', url: du.href, hint: '' });
+          }
+        } catch (e) { /* 忽略非法旧地址 */ }
+      }
     }
     return {
       ok: true,

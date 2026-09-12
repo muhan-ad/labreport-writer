@@ -1767,6 +1767,10 @@ async function checkDataUpdate() {
       showToast('error', '检查失败', r.error, 5000);
       return;
     }
+    if (r.noRemote) {
+      showToast('info', '暂无数据更新', `云端还没有发布数据更新包（当前 v${r.localVersion}）`, 4000);
+      return;
+    }
     if (!r.hasUpdate) {
       showToast('success', '已是最新', `实验数据已是最新（v${r.localVersion}）`, 3000);
       return;
