@@ -1894,6 +1894,16 @@ body {
   font-weight: 600;
 }
 .settings-panes { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; }
+
+/* 报告管理：操作按钮悬浮固定在可视区底部，列表滚动任意位置都可删除 */
+#paneReports .skill-actions {
+  position: sticky;
+  bottom: 0;
+  margin-top: 12px;
+  padding: 12px 2px 4px;
+  background: linear-gradient(180deg, rgba(251, 250, 249, 0) 0%, var(--card, #fafaf9) 26%);
+  z-index: 3;
+}
 .settings-pane { display: none; }
 .settings-pane.active { display: block; }
 
