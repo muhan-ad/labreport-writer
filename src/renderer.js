@@ -2049,8 +2049,11 @@ async function doContributeUpload() {
     files.push({ name: `自建变体_${expId}.json`, data: new TextEncoder().encode(JSON.stringify(obj, null, 1)), contentType: 'application/json' });
   } else {
     kind = 'report';
-    const score = $('cvReportScore').value.trim();
-    if (!/^\d+(\.\d+)?$/.test(score)) { showToast('warning', '请填写分数', '报告分数为必填数字（如 95）'); return; }
+    const score = $('cvReportScore').value;
+    if (!score || !/^(7|7\.5|8|8\.5|9|9\.5|10|10\.0)$/.test(String(score))) {
+      showToast('warning', '请选择分数', '报告分数为必选项（7.0 ~ 10.0）');
+      return;
+    }
     if (!cvPhotos.length && !cvDocx) { showToast('warning', '没有可上传内容', '请至少选择一张照片或一个 Word 文档'); return; }
     const prefix = `${expId}-${score}-${ts}`;
     cvPhotos.forEach((p, i) => files.push({ name: `${prefix}_${i + 1}.jpg`, data: p.buf, contentType: 'image/jpeg' }));

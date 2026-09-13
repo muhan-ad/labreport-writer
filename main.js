@@ -567,11 +567,36 @@ ipcMain.handle('delete-custom-variant', (_, expId, section, index) => {
     if (typeof index !== 'number' || index < 0 || index >= arr.length) {
       return { ok: false, error: '无效的变体序号' };
     }
+    const text = arr[index];
     arr.splice(index, 1);
     if (arr.length) v[section] = arr; else delete v[section];
     const anyLeft = Object.values(v).some(a => Array.isArray(a) && a.length);
     if (anyLeft) fs.writeFileSync(p, JSON.stringify(v, null, 1), 'utf-8');
     else if (fs.existsSync(p)) fs.unlinkSync(p);
+    // 联动清理：删除自建库条目的同时，把该实验 variants.json 中同章节的同文本条目一并移除
+    // （保存自建变体时实验里也追加了一份，库删了实验里不应残留“生成后的变体”）
+    if (typeof text === 'string' && text) {
+      try {
+        const { roots } = getDataRoots();
+        let expDir = null;
+        for (const r of roots) {
+          const cand = path.join(r.dir, expId);
+          if (fs.existsSync(path.join(cand, 'variants.json'))) { expDir = cand; break; }
+        }
+        if (expDir) {
+          const work = ensureUserCopy(expDir);
+          const vp = path.join(work, 'variants.json');
+          const ev = JSON.parse(fs.readFileSync(vp, 'utf-8'));
+          const cur = Array.isArray(ev[section]) ? ev[section] : [];
+          const rmIdx = cur.indexOf(text);
+          if (rmIdx >= 0) {
+            cur.splice(rmIdx, 1);
+            if (cur.length) ev[section] = cur; else delete ev[section];
+            fs.writeFileSync(vp, JSON.stringify(ev, null, 1), 'utf-8');
+          }
+        }
+      } catch (e) { /* 联动清理失败不阻塞库删除 */ }
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
