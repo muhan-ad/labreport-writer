@@ -766,15 +766,15 @@
       <div class="modal-body">
         <div class="form-row">
           <label>调整指令（可选）</label>
-          <input type="text" id="variantAIInstruction" placeholder="例如：更正式的学术风格 / 更简洁 / 换个思路表述" />
+          <textarea id="variantAIInstruction" rows="3" placeholder="例如：更正式的学术风格 / 更简洁 / 换个思路表述"></textarea>
         </div>
         <div class="form-row">
           <label>原变体文本</label>
-          <textarea id="variantAIOriginal" rows="4" readonly></textarea>
+          <textarea id="variantAIOriginal" rows="7" readonly></textarea>
         </div>
         <div class="form-row">
           <label>AI 生成结果（可直接编辑后保存）</label>
-          <textarea id="variantAIResult" rows="6"></textarea>
+          <textarea id="variantAIResult" rows="10"></textarea>
         </div>
         <div class="form-row">
           <label class="checkbox-label"><input type="checkbox" id="chkArchiveVariant" checked /> 同时存入自建变体库</label>

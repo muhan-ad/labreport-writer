@@ -1605,7 +1605,34 @@ body {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 .modal-wide { width: 480px; }
-.modal-xl { width: 600px; max-width: 92vw; }   /* AI 调整等长文本弹窗：更宽，输入框文字完整展示 */
+.modal-xl { width: 760px; max-width: 94vw; }   /* AI 调整等长文本弹窗：宽大布局，输入区完整展示 */
+
+/* AI 调整弹窗：三个输入区统一加高，长文本可完整阅读 */
+#variantAIModal textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text, #292524);
+  background: #fff;
+  border: 1px solid var(--border, #e7e5e4);
+  border-radius: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+#variantAIModal textarea:focus {
+  outline: none;
+  border-color: var(--accent, #4a7cf7);
+  box-shadow: 0 0 0 3px rgba(74, 124, 247, 0.15);
+}
+#variantAIModal #variantAIOriginal {
+  min-height: 170px;   /* 原文本：更高的阅读区 */
+  background: #fafaf9;
+}
+#variantAIModal #variantAIResult {
+  min-height: 240px;   /* 生成结果：最宽裕，便于长文本编辑 */
+}
 
 /* 贡献报告页：分数下拉美化 + 模块间更大间距 */
 #cvPaneReport > .form-row { margin-bottom: 18px; }
