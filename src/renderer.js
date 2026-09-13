@@ -1125,6 +1125,15 @@ async function refreshAfterCustomVariantChange() {
     updateCategoryCounts();
     updateEmptyStats();
   } catch (e) { /* 扫描失败不阻塞 */ }
+  // 同步当前打开的实验：更新路径引用并重读变体列表，
+  // 保证删除/恢复后主界面变体下拉与磁盘一致（不再显示已删除的“生成后的变体”）
+  if (currentExp) {
+    const updated = experiments.find(e => e.id === currentExp.id);
+    if (updated) {
+      currentExp = updated;
+      try { await loadVariantsUI(updated); } catch (e) { /* 忽略 */ }
+    }
+  }
 }
 
 async function deleteCustomVariantOne(section, index) {
